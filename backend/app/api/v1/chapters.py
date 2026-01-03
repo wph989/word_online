@@ -3,7 +3,7 @@
 提供章节的 CRUD 操作
 
 核心逻辑:
-1. 保存: HTML -> HtmlParserV2 -> Content + StyleSheet JSON
+1. 保存: HTML -> HtmlParser -> Content + StyleSheet JSON
 2. 回显: Content + StyleSheet JSON -> HtmlRenderer -> HTML
 3. AI 修改: 修改 JSON -> HtmlRenderer -> 新 HTML
 """
@@ -24,7 +24,7 @@ from app.models.schemas import (
     MessageResponse
 )
 from app.models.content_models import Content, StyleSheet
-from app.services.html_parser_v2 import HtmlParserV2
+from app.services.html_parser import HtmlParser
 from app.services.wangeditor_renderer import WangEditorRenderer  # 使用 WangEditor 兼容渲染器
 
 
@@ -41,7 +41,7 @@ def create_chapter(
     
     流程:
     1. 接收前端传来的 HTML
-    2. 使用 HtmlParserV2 解析为 Content + StyleSheet
+    2. 使用 HtmlParser 解析为 Content + StyleSheet
     3. 同时保存原始 HTML 和解析后的 JSON
     
     Args:
@@ -52,7 +52,7 @@ def create_chapter(
         创建的章节基础信息
     """
     # 使用新版解析器解析 HTML
-    parser = HtmlParserV2(chapter_in.html_content)
+    parser = HtmlParser(chapter_in.html_content)
     content, stylesheet = parser.parse()
     
     # 创建章节记录
@@ -198,7 +198,7 @@ def update_chapter(
     
     # 如果有新的 HTML 内容,重新解析
     if chapter_in.html_content is not None:
-        parser = HtmlParserV2(chapter_in.html_content)
+        parser = HtmlParser(chapter_in.html_content)
         content, stylesheet = parser.parse()
         
         chapter.html_content = chapter_in.html_content

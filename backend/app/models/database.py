@@ -88,6 +88,48 @@ class Chapter(Base):
     document = relationship("Document", back_populates="chapters")
 
 
+class DocumentSettings(Base):
+    """
+    文档配置表
+    存储文档的页面设置和标题样式配置
+    """
+    __tablename__ = "document_settings"
+    
+    # 主键：与文档 ID 一致（一对一关系）
+    doc_id = Column(
+        String(36), 
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        primary_key=True,
+        comment="所属文档ID"
+    )
+    
+    # 页边距配置 (单位: px)
+    margin_top = Column(Integer, default=40, comment="上边距")
+    margin_bottom = Column(Integer, default=40, comment="下边距")
+    margin_left = Column(Integer, default=50, comment="左边距")
+    margin_right = Column(Integer, default=50, comment="右边距")
+    
+    # 标题样式配置 (JSON 格式存储 H1-H6 的样式)
+    # 格式: {"h1": {"fontSize": 24, "fontWeight": "bold", "color": "#333", ...}, ...}
+    heading_styles = Column(
+        JSON, 
+        nullable=False,
+        comment="标题样式配置 (H1-H6)"
+    )
+    
+    # 时间戳
+    created_at = Column(DateTime, default=datetime.utcnow, comment="创建时间")
+    updated_at = Column(
+        DateTime, 
+        default=datetime.utcnow, 
+        onupdate=datetime.utcnow,
+        comment="更新时间"
+    )
+    
+    # 关联关系：配置属于一个文档
+    document = relationship("Document", backref="settings", uselist=False)
+
+
 class Asset(Base):
     """
     资源表

@@ -15,7 +15,7 @@ from docx.shared import Pt, Inches, RGBColor, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional, Tuple, Union
 import io
 import re
 import base64
@@ -38,21 +38,111 @@ class DocxExporter:
     将结构化的 Content 和 StyleSheet 转换为 Word 文档
     """
     
-    def __init__(self, content: Dict[str, Any], stylesheet: Dict[str, Any]):
+    def __init__(
+        self, 
+        content: Dict[str, Any], 
+        stylesheet: Dict[str, Any],
+        document_settings: Optional[Dict[str, Any]] = None
+    ):
         """
         初始化导出器
         
         Args:
             content: Content JSON
             stylesheet: StyleSheet JSON
+            document_settings: 文档配置 (页边距、标题样式等)
         """
         self.content = content
         self.stylesheet = stylesheet
+        self.document_settings = document_settings or {}
         self.doc = Document()
+        
+        # 应用页边距配置
+        self._apply_page_margins()
+        
+        # 配置标题样式模板
+        self._configure_heading_styles()
+        
         self.style_map = self._build_style_map()
         self.cell_style_map = self._build_cell_style_map()
         
         logger.info(f"初始化 DocxExporter, Blocks 数量: {len(content.get('blocks', []))}")
+        if document_settings:
+            logger.info(f"应用文档配置: 页边距={document_settings.get('margin_top', 2.54)}cm(上)")
+    
+    def _apply_page_margins(self):
+        """应用页边距配置到文档"""
+        if not self.document_settings:
+            return
+        
+        # 获取页边距配置 (单位: cm)
+        margin_top = self.document_settings.get('margin_top', 2.54)
+        margin_bottom = self.document_settings.get('margin_bottom', 2.54)
+        margin_left = self.document_settings.get('margin_left', 3.17)
+        margin_right = self.document_settings.get('margin_right', 3.17)
+        
+        # 应用到所有节（Section）
+        for section in self.doc.sections:
+            section.top_margin = Cm(margin_top)
+            section.bottom_margin = Cm(margin_bottom)
+            section.left_margin = Cm(margin_left)
+            section.right_margin = Cm(margin_right)
+        
+        logger.info(f"✅ 应用页边距: 上={margin_top}cm, 下={margin_bottom}cm, 左={margin_left}cm, 右={margin_right}cm")
+    
+    def _configure_heading_styles(self):
+        """配置 Word 的标题样式模板"""
+        if not self.document_settings or 'heading_styles' not in self.document_settings:
+            return
+        
+        heading_styles_config = self.document_settings['heading_styles']
+        
+        for level in range(1, 7):  # Word 支持 Heading 1-6
+            h_key = f"h{level}"
+            if h_key not in heading_styles_config:
+                continue
+            
+            config = heading_styles_config[h_key]
+            style_name = f'Heading {level}'
+            
+            try:
+                # 获取或创建标题样式
+                if style_name in self.doc.styles:
+                    style = self.doc.styles[style_name]
+                else:
+                    logger.warning(f"样式 {style_name} 不存在,跳过配置")
+                    continue
+                
+                # 配置字体
+                if config.get('fontFamily'):
+                    style.font.name = config['fontFamily']
+                    # 设置中文字体
+                    style.element.rPr.rFonts.set(qn('w:eastAsia'), config['fontFamily'])
+                
+                # 配置字号 (pt)
+                if config.get('fontSize'):
+                    style.font.size = Pt(config['fontSize'])
+                
+                # 配置颜色
+                if config.get('color'):
+                    rgb = self._parse_color(config['color'])
+                    if rgb:
+                        style.font.color.rgb = RGBColor(*rgb)
+                
+                # 配置加粗
+                if config.get('fontWeight') == 'bold':
+                    style.font.bold = True
+                
+                # 配置段落间距
+                if config.get('marginTop'):
+                    style.paragraph_format.space_before = Pt(config['marginTop'])
+                if config.get('marginBottom'):
+                    style.paragraph_format.space_after = Pt(config['marginBottom'])
+                
+                logger.info(f"✅ 配置标题样式: {style_name} - 字体={config.get('fontFamily')}, 字号={config.get('fontSize')}pt")
+                
+            except Exception as e:
+                logger.error(f"配置标题样式 {style_name} 失败: {e}", exc_info=True)
     
     def export(self) -> io.BytesIO:
         """
@@ -176,20 +266,32 @@ class DocxExporter:
         self._apply_paragraph_style(para, block_id)
     
     def _add_heading(self, block: Dict[str, Any]):
-        """添加标题"""
+        """添加标题
+        
+        标题格式处理规则:
+        1. 标题样式模板在 _configure_heading_styles() 中已配置到 Word 文档
+        2. 创建的标题段落会自动继承对应的样式模板(Heading 1-6)
+        3. 如果文本有 mark 格式,在样式模板基础上叠加这些格式
+        4. mark 格式只影响当前标题文本,不修改样式模板本身
+        """
         level = block.get("level", 1)
         text = block.get("text", "")
         marks = block.get("marks", [])
         block_id = block.get("id")
         
-        # 创建标题段落
+        # 创建标题段落 (会自动应用对应的 Heading 样式模板)
         para = self.doc.add_heading(level=level)
         para.text = ""  # 清空默认文本
+        # 显式清除所有 runs,防止保留一个空 run
+        for run in list(para.runs):
+            run._element.getparent().remove(run._element)
         
         # 添加文本和标记
-        self._add_text_with_marks(para, text, marks)
+        # inherit_paragraph_style=True 表示 run 继承段落样式模板,不应用默认字体和字号
+        # marks 会在样式模板的基础上叠加(如局部加粗、变色等)
+        self._add_text_with_marks(para, text, marks, inherit_paragraph_style=True)
         
-        # 应用样式
+        # 应用 StyleSheet 中的段落级样式(如对齐、行高等)
         self._apply_paragraph_style(para, block_id)
     
     def _add_table(self, block: Dict[str, Any]):
@@ -338,7 +440,7 @@ class DocxExporter:
         pBdr.append(bottom)
         pPr.append(pBdr)
     
-    def _add_text_with_marks(self, para, text: str, marks: List[Dict[str, Any]]):
+    def _add_text_with_marks(self, para, text: str, marks: List[Dict[str, Any]], default_style: Optional[Dict[str, Any]] = None, filter_mark_types: Optional[List[str]] = None, inherit_paragraph_style: bool = False):
         """
         添加带标记的文本到段落
         
@@ -346,12 +448,21 @@ class DocxExporter:
             para: Word 段落对象
             text: 文本内容
             marks: 标记列表
+            default_style: 默认样式 (如标题的字号、颜色等)
+            filter_mark_types: 需要过滤的 mark 类型列表（这些 mark 将被忽略）
+            inherit_paragraph_style: 是否继承段落样式(True 时不应用默认字体和字号)
         """
         if not text:
             return
         
+        # 过滤 marks
+        if filter_mark_types:
+            marks = [m for m in marks if m.get("type") not in filter_mark_types]
+        
+        
         if not marks:
-            para.add_run(text)
+            run = para.add_run(text)
+            self._apply_default_style_to_run(run, default_style, inherit_paragraph_style)
             return
         
         # 构建字符级别的标记映射
@@ -379,12 +490,48 @@ class DocxExporter:
         for start, end, segment_marks in segments:
             run = para.add_run(text[start:end])
             
-            # 1. 先应用默认样式
-            run.font.name = get_default_font_family()
-            run.font.size = Pt(get_default_font_size_pt())
+            # 1. 先应用默认样式 (如果有传入 default_style，则使用它；否则使用全局默认)
+            self._apply_default_style_to_run(run, default_style, inherit_paragraph_style)
             
             # 2. 再应用字符级标记（会覆盖默认值）
             self._apply_marks_to_run(run, segment_marks)
+    
+    def _apply_default_style_to_run(self, run, default_style: Optional[Dict[str, Any]], inherit_paragraph_style: bool = False):
+        """应用默认样式到 run
+        
+        Args:
+            run: Word run 对象
+            default_style: 默认样式字典
+            inherit_paragraph_style: 是否继承段落样式(True 时不设置字体和字号)
+        """
+        # 如果继承段落样式(如标题),则不设置默认字体和字号
+        # 让 run 继承段落样式模板的设置
+        if not inherit_paragraph_style:
+            # 基础默认值(仅用于普通段落)
+            run.font.name = get_default_font_family()
+            run.font.size = Pt(get_default_font_size_pt())
+        
+        if not default_style:
+            return
+            
+        # 应用传入的覆盖样式
+        if default_style.get("fontSize"):
+            pt_size = default_style["fontSize"]
+            run.font.size = Pt(pt_size)
+        
+        if default_style.get("color"):
+            rgb = self._parse_color(default_style["color"])
+            if rgb:
+                run.font.color.rgb = RGBColor(*rgb)
+        
+        if default_style.get("fontFamily"):
+            font_family = default_style["fontFamily"]
+            run.font.name = font_family
+            # 设置中文字体
+            run._element.rPr.rFonts.set(qn('w:eastAsia'), font_family)
+
+        if default_style.get("fontWeight") == "bold":
+            run.bold = True
     
     
     def _apply_marks_to_run(self, run, marks: List[Dict[str, Any]]):
@@ -613,26 +760,36 @@ class DocxExporter:
         
         return None
     
-    def _parse_font_size(self, size_str: str) -> Optional[int]:
+    def _parse_font_size(self, size_str: Union[str, int, float]) -> Optional[float]:
         """
-        解析字号字符串为数字
+        解析字号字符串为 Pt 数值 (float)
         
         Args:
-            size_str: 字号字符串(如 "16px" 或 "16")
+            size_str: 字号字符串(如 "16px", "10.5pt", "16")
             
         Returns:
-            字号数字或 None
+            字号(Pt) 或 None
         """
         if not size_str:
             return None
         
-        # 如果已经是数字
+        # 如果已经是数字，默认为 pt (因为现在的系统主要推崇 pt)
         if isinstance(size_str, (int, float)):
-            return int(size_str)
+            return float(size_str)
         
-        # 提取数字
-        match = re.search(r'(\d+)', str(size_str))
-        if match:
-            return int(match.group(1))
+        s = str(size_str).lower().strip()
         
-        return None
+        # 提取数值
+        match = re.search(r'(\d+(\.\d+)?)', s)
+        if not match:
+            return None
+            
+        val = float(match.group(1))
+        
+        # 单位判断
+        if 'px' in s:
+            # px 转 pt (Web常用 1px = 0.75pt)
+            return val * 0.75
+        
+        # 默认或明确为 pt -> 直接返回
+        return val

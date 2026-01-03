@@ -17,7 +17,7 @@ import logging
 from urllib.parse import quote
 
 from app.core.database import get_db
-from app.models.database import Chapter, Document
+from app.models.database import Chapter, Document, DocumentSettings
 from app.services.docx_exporter import DocxExporter
 
 logger = logging.getLogger(__name__)
@@ -86,8 +86,23 @@ def export_chapter_to_docx(
             }
             content["blocks"].insert(0, title_block)
         
-        # 创建导出器
-        exporter = DocxExporter(content, stylesheet)
+        # 查询文档配置
+        doc_settings = db.query(DocumentSettings).filter(
+            DocumentSettings.doc_id == chapter.doc_id
+        ).first()
+        
+        settings_dict = None
+        if doc_settings:
+            settings_dict = {
+                'margin_top': doc_settings.margin_top,
+                'margin_bottom': doc_settings.margin_bottom,
+                'margin_left': doc_settings.margin_left,
+                'margin_right': doc_settings.margin_right,
+                'heading_styles': doc_settings.heading_styles
+            }
+        
+        # 创建导出器（传入文档配置）
+        exporter = DocxExporter(content, stylesheet, settings_dict)
         file_stream = exporter.export()
         
         # 生成文件名(移除非法字符)
@@ -187,8 +202,23 @@ def export_document_to_docx(
                     "type": "divider"
                 })
         
-        # 创建导出器
-        exporter = DocxExporter(merged_content, merged_stylesheet)
+        # 查询文档配置
+        doc_settings = db.query(DocumentSettings).filter(
+            DocumentSettings.doc_id == doc_id
+        ).first()
+        
+        settings_dict = None
+        if doc_settings:
+            settings_dict = {
+                'margin_top': doc_settings.margin_top,
+                'margin_bottom': doc_settings.margin_bottom,
+                'margin_left': doc_settings.margin_left,
+                'margin_right': doc_settings.margin_right,
+                'heading_styles': doc_settings.heading_styles
+            }
+        
+        # 创建导出器（传入文档配置）
+        exporter = DocxExporter(merged_content, merged_stylesheet, settings_dict)
         file_stream = exporter.export()
         
         # 生成文件名
@@ -292,8 +322,26 @@ def export_batch_chapters(
                     "type": "divider"
                 })
         
-        # 创建导出器
-        exporter = DocxExporter(merged_content, merged_stylesheet)
+        # 查询文档配置（使用第一个章节的文档ID）
+        first_chapter_doc_id = ordered_chapters[0].doc_id if ordered_chapters else None
+        doc_settings = None
+        if first_chapter_doc_id:
+            doc_settings = db.query(DocumentSettings).filter(
+                DocumentSettings.doc_id == first_chapter_doc_id
+            ).first()
+        
+        settings_dict = None
+        if doc_settings:
+            settings_dict = {
+                'margin_top': doc_settings.margin_top,
+                'margin_bottom': doc_settings.margin_bottom,
+                'margin_left': doc_settings.margin_left,
+                'margin_right': doc_settings.margin_right,
+                'heading_styles': doc_settings.heading_styles
+            }
+        
+        # 创建导出器（传入文档配置）
+        exporter = DocxExporter(merged_content, merged_stylesheet, settings_dict)
         file_stream = exporter.export()
         
         # 生成文件名

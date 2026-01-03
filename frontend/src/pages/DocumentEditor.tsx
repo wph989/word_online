@@ -208,6 +208,7 @@ const DocumentEditor: React.FC = () => {
                   key={chapter.id} // 切换章节时强制重新渲染编辑器
                   html={chapter.html_content || ''}
                   onChange={handleEditorChange}
+                  docId={docId}
                 />
               </ErrorBoundary>
             </div>

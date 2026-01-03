@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
 from app.core.database import engine, Base
-from app.api.v1 import chapters, documents, export, upload, ai_chapters
+from app.api.v1 import chapters, documents, export, upload, ai_chapters, document_settings
 
 
 @asynccontextmanager
@@ -57,6 +57,7 @@ app.include_router(chapters.router)
 app.include_router(export.router)
 app.include_router(upload.router)
 app.include_router(ai_chapters.router)  # AI 章节处理 API
+app.include_router(document_settings.router)  # 文档配置 API
 
 
 # 挂载静态文件目录（用于提供上传的图片）

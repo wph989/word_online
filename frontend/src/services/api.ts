@@ -103,6 +103,23 @@ export const chapterService = {
   }
 };
 
+// ============ Settings Service ============
+
+export const settingsService = {
+  // 获取文档配置
+  getDocumentSettings: async (docId: string) => {
+    const response = await api.get(`/api/v1/settings/${docId}`);
+    return response.data;
+  },
+
+  // 保存文档配置 (Upsert)
+  saveDocumentSettings: async (docId: string, settings: any) => {
+    // settings 包含 margin_top 等和 heading_styles
+    const response = await api.put(`/api/v1/settings/${docId}`, settings);
+    return response.data;
+  }
+};
+
 // 兼容现有代码的直接导出
 export const createDocument = chapterService.createDocument;
 export const listDocuments = chapterService.getDocumentsList;

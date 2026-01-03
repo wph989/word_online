@@ -357,7 +357,10 @@ class WangEditorRenderer:
                 
                 if styles:
                     # 添加末尾分号,确保 WangEditor 正确解析
-                    style_attr = "; ".join(styles) + ";"
+                    # 移除空格以兼容某些解析器
+                    style_attr = ";".join(styles) + ";"
+                    # 重要: 转义属性值中的双引号等特殊字符,防止破坏 HTML 结构
+                    style_attr = html.escape(style_attr)
                     current_html = f'<span style="{style_attr}">{current_html}</span>'
             
             # 7. 应用 LinkMark(最外层)
@@ -467,5 +470,6 @@ class WangEditorRenderer:
             ' style="..."' 或空字符串
         """
         if style:
-            return f' style="{style}"'
+            # 确保转义
+            return f' style="{html.escape(style)}"'
         return ""

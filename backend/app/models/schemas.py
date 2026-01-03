@@ -118,3 +118,56 @@ class MessageResponse(BaseModel):
     """通用消息响应"""
     message: str = Field(..., description="响应消息")
     success: bool = Field(default=True, description="是否成功")
+
+
+# ============ 文档配置相关模型 ============
+
+class HeadingStyle(BaseModel):
+    """单个标题级别的样式配置"""
+    fontSize: float = Field(..., ge=1, le=100, description="字号 (pt)")
+    fontFamily: str = Field(default="Microsoft YaHei", description="字体名称")
+    fontWeight: str = Field(..., description="字体粗细 (normal/bold)")
+    color: str = Field(..., description="颜色 (HEX格式)")
+    marginTop: float = Field(..., ge=0, description="段前距 (pt)")
+    marginBottom: float = Field(..., ge=0, description="段后距 (pt)")
+
+
+class DocumentSettingsCreate(BaseModel):
+    """创建文档配置的请求模型"""
+    doc_id: str = Field(..., description="所属文档ID")
+    margin_top: float = Field(default=2.54, ge=0, description="上边距 (cm)")
+    margin_bottom: float = Field(default=2.54, ge=0, description="下边距 (cm)")
+    margin_left: float = Field(default=3.17, ge=0, description="左边距 (cm)")
+    margin_right: float = Field(default=3.17, ge=0, description="右边距 (cm)")
+    heading_styles: Dict[str, HeadingStyle] = Field(
+        ..., 
+        description="标题样式配置 (h1-h6)"
+    )
+
+
+class DocumentSettingsUpdate(BaseModel):
+    """更新文档配置的请求模型"""
+    margin_top: Optional[float] = Field(None, ge=0, description="上边距 (cm)")
+    margin_bottom: Optional[float] = Field(None, ge=0, description="下边距 (cm)")
+    margin_left: Optional[float] = Field(None, ge=0, description="左边距 (cm)")
+    margin_right: Optional[float] = Field(None, ge=0, description="右边距 (cm)")
+    heading_styles: Optional[Dict[str, HeadingStyle]] = Field(
+        None, 
+        description="标题样式配置 (h1-h6)"
+    )
+
+
+class DocumentSettingsResponse(BaseModel):
+    """文档配置响应模型"""
+    doc_id: str = Field(..., description="所属文档ID")
+    margin_top: float = Field(..., description="上边距 (cm)")
+    margin_bottom: float = Field(..., description="下边距 (cm)")
+    margin_left: float = Field(..., description="左边距 (cm)")
+    margin_right: float = Field(..., description="右边距 (cm)")
+    heading_styles: Dict[str, Any] = Field(..., description="标题样式配置")
+    created_at: datetime = Field(..., description="创建时间")
+    updated_at: datetime = Field(..., description="更新时间")
+    
+    class Config:
+        from_attributes = True
+

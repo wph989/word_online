@@ -1,18 +1,25 @@
 """
-HTML 解析服务（重构版）
-使用 Pydantic 模型，确保数据结构与前端完全一致
-负责将前端传来的 HTML 转换为 Content 和 StyleSheet
+HTML 解析服务 V2 - 优化版
+将前端 HTML 解析为数据结构与样式分离的 JSON 格式
+确保数据与样式完全分离,且能完全还原为原始 HTML
+
+核心设计原则:
+1. 数据与样式严格分离
+2. 保留原始 HTML 用于完全还原
+3. 提取结构化数据用于 AI 赋能
+4. 样式信息独立存储,便于主题切换
 """
 
-from bs4 import BeautifulSoup, Tag
+from bs4 import BeautifulSoup, Tag, NavigableString
 from typing import List, Tuple, Optional, Dict, Any
 import uuid
 import re
+import json
 
 from app.models.content_models import (
     Content, StyleSheet, Block,
-    ParagraphBlock, HeadingBlock, ImageBlock, TableBlock, CodeBlock,
-    ParagraphAttrs, ImageMeta,
+    ParagraphBlock, HeadingBlock, ImageBlock, TableBlock, CodeBlock, DividerBlock,
+    ParagraphAttrs, ImageMeta, TableData, TableCellData, MergeRegion,
     Mark, SimpleMark, LinkMark, ValueMark,
     StyleRule, StyleTarget, StyleDeclaration, StyleScope
 )
@@ -20,14 +27,14 @@ from app.models.content_models import (
 
 class HtmlParser:
     """
-    HTML 解析器
-    将富文本编辑器生成的 HTML 转换为结构化的 Content 和 StyleSheet
+    HTML 解析器 V2 - 增强版
     
-    功能：
-    1. 解析段落、标题、表格、图片、列表、代码块
-    2. 提取行内标记（粗体、斜体、颜色等）
-    3. 提取块级样式并生成 StyleSheet
-    4. 支持表格合并单元格
+    功能增强:
+    1. 更精确的样式提取(区分用户设置 vs 默认样式)
+    2. 支持表格列宽度提取
+    3. 支持单元格样式提取
+    4. 优化的 Mark 提取算法(避免重复和冗余)
+    5. 完整的列表支持(有序、无序、嵌套)
     """
     
     def __init__(self, html_content: str):
@@ -42,10 +49,13 @@ class HtmlParser:
         self.blocks: List[Block] = []
         self.style_rules: List[StyleRule] = []
         self.style_id = f"style-{uuid.uuid4().hex[:8]}"
+        
+        # 样式提取计数器(用于生成唯一 ID)
+        self.style_counter = 0
     
     def parse(self) -> Tuple[Content, StyleSheet]:
         """
-        执行解析，返回 Content 和 StyleSheet
+        执行解析,返回 Content 和 StyleSheet
         
         Returns:
             (Content, StyleSheet) 元组
@@ -65,7 +75,7 @@ class HtmlParser:
     
     def _parse_body(self):
         """解析 HTML body 中的所有顶层元素"""
-        # 获取 body 标签，如果没有则使用整个文档
+        # 获取 body 标签,如果没有则使用整个文档
         body = self.soup.find('body')
         if not body:
             body = self.soup
@@ -76,6 +86,18 @@ class HtmlParser:
                 block = self._parse_element(element)
                 if block:
                     self.blocks.append(block)
+            elif isinstance(element, NavigableString):
+                # 处理纯文本节点(不在任何标签内的文本)
+                text = str(element).strip()
+                if text:
+                    # 将纯文本包装为段落
+                    block_id = f"para-{uuid.uuid4().hex[:8]}"
+                    self.blocks.append(ParagraphBlock(
+                        id=block_id,
+                        type="paragraph",
+                        text=text,
+                        marks=[]
+                    ))
     
     def _parse_element(self, element: Tag) -> Optional[Block]:
         """
@@ -105,7 +127,7 @@ class HtmlParser:
         elif tag_name == 'img':
             return self._parse_image(element)
         
-        # 列表（转换为带 listType 属性的段落）
+        # 列表(转换为带 listType 属性的段落)
         elif tag_name in ['ul', 'ol']:
             self._parse_list(element)
             return None  # 列表项已直接添加到 blocks
@@ -114,8 +136,45 @@ class HtmlParser:
         elif tag_name == 'pre':
             return self._parse_code_block(element)
         
+        # 分割线
+        elif tag_name == 'hr':
+            return self._parse_divider(element)
+        
         # 其他块级元素当作段落处理
         elif tag_name in ['div', 'section', 'article']:
+            # 1. 明确的分割线包装器
+            if 'w-e-textarea-divider' in element.get('class', []) or element.find('hr', recursive=False): # 浅层查找
+                 return self._parse_divider(element)
+            
+            # 2. 检查是否包含块级子元素 (如果包含，则视为容器进行解包)
+            # 定义块级标签
+            block_tags = ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'table', 'ul', 'ol', 'pre', 'hr', 'blockquote', 'div', 'section', 'article']
+            has_block_children = any(child.name in block_tags for child in element.children if isinstance(child, Tag))
+            
+            if has_block_children:
+                # 递归处理子节点，并将结果直接添加到 self.blocks
+                for child in element.children:
+                    if isinstance(child, Tag):
+                        child_block = self._parse_element(child) 
+                        if child_block:
+                            self.content.blocks.append(child_block)
+                    elif isinstance(child, NavigableString):
+                        text = str(child).strip()
+                        if text:
+                            block_id = f"para-{uuid.uuid4().hex[:8]}"
+                            self.content.blocks.append(ParagraphBlock(
+                                id=block_id,
+                                type="paragraph",
+                                text=text,
+                                marks=[]
+                            ))
+                return None # 已处理，父级不需要再添加
+            
+            # 3. 如果没有块级子元素，但包含深层 hr (非直接子元素)
+            if element.find('hr'):
+                 return self._parse_divider(element)
+                 
+            # 4. 否则，当作普通段落处理
             return self._parse_paragraph(element)
         
         return None
@@ -135,8 +194,8 @@ class HtmlParser:
         # 提取文本内容和标记
         text, marks = self._extract_text_and_marks(element)
         
-        # 提取段落级样式
-        styles = self._extract_block_styles(element)
+        # 提取段落级样式(只提取用户明确设置的样式)
+        styles = self._extract_user_block_styles(element)
         
         # 构建 ParagraphBlock
         block = ParagraphBlock(
@@ -146,7 +205,7 @@ class HtmlParser:
             marks=marks
         )
         
-        # 如果有样式，添加到 StyleSheet
+        # 如果有样式,添加到 StyleSheet
         if styles:
             self._add_style_rule(block_id, "paragraph", styles)
         
@@ -169,7 +228,7 @@ class HtmlParser:
         text, marks = self._extract_text_and_marks(element)
         
         # 提取样式
-        styles = self._extract_block_styles(element)
+        styles = self._extract_user_block_styles(element)
         
         # 构建 HeadingBlock
         block = HeadingBlock(
@@ -188,8 +247,11 @@ class HtmlParser:
     
     def _parse_table(self, element: Tag) -> TableBlock:
         """
-        解析表格元素（核心功能）
-        支持合并单元格
+        解析表格元素(核心功能)
+        支持:
+        1. 合并单元格
+        2. 列宽度提取
+        3. 单元格样式提取
         
         Args:
             element: table 标签
@@ -197,13 +259,94 @@ class HtmlParser:
         Returns:
             TableBlock 对象
         """
-        from app.utils.table_parser import TableParser
-        
-        # 使用专门的表格解析器
-        parser = TableParser(element)
-        table_data = parser.parse()
-        
         block_id = f"table-{uuid.uuid4().hex[:8]}"
+        
+        # 初始化表格数据
+        table_data = TableData(
+            rows=0,
+            cols=0,
+            cells=[],
+            mergeRegions=[]
+        )
+        
+        # 提取表格行
+        rows = element.find_all('tr', recursive=True)
+        table_data.rows = len(rows)
+        
+        # 计算最大列数
+        max_cols = 0
+        for row in rows:
+            cells = row.find_all(['td', 'th'], recursive=False)
+            col_count = sum(int(cell.get('colspan', 1)) for cell in cells)
+            max_cols = max(max_cols, col_count)
+        table_data.cols = max_cols
+        
+        # 提取列宽度(从 colgroup 或首行单元格)
+        self._extract_column_widths(element, block_id, max_cols)
+        
+        # 解析单元格
+        # 使用占用矩阵追踪合并单元格
+        occupied = [[False] * max_cols for _ in range(table_data.rows)]
+        
+        for row_idx, row in enumerate(rows):
+            cells = row.find_all(['td', 'th'], recursive=False)
+            col_idx = 0
+            
+            for cell in cells:
+                # 找到下一个未占用的列
+                while col_idx < max_cols and occupied[row_idx][col_idx]:
+                    col_idx += 1
+                
+                if col_idx >= max_cols:
+                    break
+                
+                # 获取合并信息
+                rowspan = int(cell.get('rowspan', 1))
+                colspan = int(cell.get('colspan', 1))
+                
+                # 提取单元格内容
+                text, marks = self._extract_text_and_marks(cell)
+                
+                # 提取单元格样式
+                cell_id = f"cell-{row_idx}-{col_idx}"
+                cell_styles = self._extract_cell_user_styles(cell)
+                
+                # 创建单元格数据
+                cell_data = TableCellData(
+                    cell=[row_idx, col_idx],
+                    content={"text": text, "marks": [m.model_dump() for m in marks]}
+                )
+                
+                # 如果有样式,添加 styleId
+                if cell_styles:
+                    cell_data.styleId = cell_id
+                    self._add_style_rule(
+                        cell_id, 
+                        "tableCell", 
+                        cell_styles,
+                        cell_type=cell.name
+                    )
+                
+                table_data.cells.append(cell_data)
+                
+                # 标记占用区域
+                for r in range(row_idx, min(row_idx + rowspan, table_data.rows)):
+                    for c in range(col_idx, min(col_idx + colspan, max_cols)):
+                        occupied[r][c] = True
+                
+                # 处理合并单元格
+                if rowspan > 1 or colspan > 1:
+                    merge_type = 'horizontal' if rowspan == 1 else ('vertical' if colspan == 1 else 'rectangular')
+                    merge_region = MergeRegion(
+                        id=f"merge-{row_idx}-{col_idx}",
+                        start=[row_idx, col_idx],
+                        end=[row_idx + rowspan - 1, col_idx + colspan - 1],
+                        masterCell=[row_idx, col_idx],
+                        type=merge_type
+                    )
+                    table_data.mergeRegions.append(merge_region)
+                
+                col_idx += 1
         
         # 提取表格级样式
         table_styles = self._extract_table_styles(element)
@@ -218,6 +361,65 @@ class HtmlParser:
         )
         
         return block
+    
+    def _extract_column_widths(self, table: Tag, table_id: str, col_count: int):
+        """
+        提取表格列宽度
+        
+        Args:
+            table: table 元素
+            table_id: 表格 ID
+            col_count: 列数
+        """
+        # 尝试从 colgroup 提取
+        colgroup = table.find('colgroup')
+        if colgroup:
+            cols = colgroup.find_all('col')
+            for idx, col in enumerate(cols):
+                if idx >= col_count:
+                    break
+                
+                width = col.get('width')
+                if width and width != 'auto':
+                    # 提取数字部分
+                    width_match = re.search(r'(\d+(?:\.\d+)?)', str(width))
+                    if width_match:
+                        width_value = str(int(float(width_match.group(1))))
+                        self._add_style_rule(
+                            table_id,
+                            "tableColumn",
+                            {"width": width_value},
+                            column_index=idx
+                        )
+        
+        # 如果 colgroup 没有宽度,尝试从首行单元格提取
+        else:
+            first_row = table.find('tr')
+            if first_row:
+                cells = first_row.find_all(['td', 'th'], recursive=False)
+                for idx, cell in enumerate(cells):
+                    if idx >= col_count:
+                        break
+                    
+                    # 尝试从 width 属性提取
+                    width = cell.get('width')
+                    if not width or width == 'auto':
+                        # 尝试从 style 提取
+                        style = cell.get('style', '')
+                        width_match = re.search(r'width:\s*(\d+(?:\.\d+)?)', style)
+                        if width_match:
+                            width = width_match.group(1)
+                    
+                    if width and width != 'auto':
+                        width_match = re.search(r'(\d+(?:\.\d+)?)', str(width))
+                        if width_match:
+                            width_value = str(int(float(width_match.group(1))))
+                            self._add_style_rule(
+                                table_id,
+                                "tableColumn",
+                                {"width": width_value},
+                                column_index=idx
+                            )
     
     def _parse_image(self, element: Tag) -> ImageBlock:
         """
@@ -238,10 +440,14 @@ class HtmlParser:
         height = element.get('height')
         
         # 构建 ImageMeta
-        meta = ImageMeta(alt=alt)
+        meta = ImageMeta(alt=alt) if alt else None
         if width:
+            if not meta:
+                meta = ImageMeta()
             meta.width = int(width) if str(width).isdigit() else width
         if height:
+            if not meta:
+                meta = ImageMeta()
             meta.height = int(height) if str(height).isdigit() else height
         
         # 构建 ImageBlock
@@ -249,11 +455,11 @@ class HtmlParser:
             id=block_id,
             type="image",
             src=src,
-            meta=meta if (alt or width or height) else None
+            meta=meta
         )
         
         # 提取样式
-        styles = self._extract_block_styles(element)
+        styles = self._extract_user_block_styles(element)
         if styles:
             self._add_style_rule(block_id, "image", styles)
         
@@ -293,7 +499,7 @@ class HtmlParser:
                 listLevel=level
             )
             
-            # 如果是有序列表，添加起始序号
+            # 如果是有序列表,添加起始序号
             if list_type == "ordered":
                 start = element.get('start', 1)
                 attrs.listStart = int(start)
@@ -317,7 +523,7 @@ class HtmlParser:
     
     def _parse_code_block(self, element: Tag) -> CodeBlock:
         """
-        解析代码块
+        解析代码块元素
         
         Args:
             element: pre 标签
@@ -327,32 +533,49 @@ class HtmlParser:
         """
         block_id = f"code-{uuid.uuid4().hex[:8]}"
         
-        # 提取代码内容
-        code_element = element.find('code')
-        text = code_element.get_text() if code_element else element.get_text()
-        
-        # 尝试提取语言信息
+        # 提取语言
         language = None
-        if code_element:
-            class_attr = code_element.get('class', [])
-            for cls in class_attr:
+        code_tag = element.find('code')
+        if code_tag:
+            # 尝试提取 class="language-xxx"
+            classes = code_tag.get('class', [])
+            for cls in classes:
                 if cls.startswith('language-'):
                     language = cls.replace('language-', '')
                     break
-        
-        # 构建 CodeBlock
-        block = CodeBlock(
+            
+            text = code_tag.get_text()
+        else:
+            text = element.get_text()
+            
+        return CodeBlock(
             id=block_id,
             type="code",
             text=text,
             language=language
         )
+
+    def _parse_divider(self, element: Tag) -> DividerBlock:
+        """
+        解析分割线
         
-        return block
-    
+        Args:
+            element: hr 标签或包含 hr 的 div
+            
+        Returns:
+            DividerBlock 对象
+        """
+        block_id = f"divider-{uuid.uuid4().hex[:8]}"
+        return DividerBlock(id=block_id, type="divider")
+        
     def _extract_text_and_marks(self, element: Tag) -> Tuple[str, List[Mark]]:
         """
-        从元素中提取纯文本和格式标记 (递归遍历法)
+        从元素中提取纯文本和格式标记(递归遍历法)
+        
+        优化:
+        1. 避免重复标记
+        2. 正确处理嵌套标记
+        3. 合并相邻的相同标记
         
         Args:
             element: HTML 元素
@@ -366,8 +589,8 @@ class HtmlParser:
         def traverse(node, current_marks):
             nonlocal full_text
             
-            if isinstance(node, str):
-                # 文本节点
+            # 文本节点
+            if isinstance(node, NavigableString):
                 text_content = str(node)
                 if not text_content:
                     return
@@ -377,10 +600,8 @@ class HtmlParser:
                 end_idx = len(full_text)
                 
                 # 为当前文本段应用所有累积的标记
-                # 注意：这里我们为每个样式创建一个新的 Mark 对象，覆盖当前文本范围
                 if start_idx < end_idx:
                     for mark_info in current_marks:
-                        # 复制标记信息，但在新的范围内
                         range_tuple = (start_idx, end_idx)
                         
                         if mark_info['type'] == 'simple':
@@ -390,10 +611,10 @@ class HtmlParser:
                         elif mark_info['type'] == 'value':
                             marks.append(ValueMark(type=mark_info['name'], range=range_tuple, value=mark_info['value']))
                 return
-
-            if not hasattr(node, 'children'):
+            
+            if not isinstance(node, Tag):
                 return
-
+            
             # 处理当前节点产生的样式
             new_marks = current_marks.copy()
             
@@ -408,26 +629,28 @@ class HtmlParser:
                 new_marks.append({'type': 'simple', 'name': 'strike'})
             elif node.name == 'code':
                 new_marks.append({'type': 'simple', 'name': 'code'})
+            elif node.name == 'sup':
+                new_marks.append({'type': 'simple', 'name': 'superscript'})
+            elif node.name == 'sub':
+                new_marks.append({'type': 'simple', 'name': 'subscript'})
             
             # 2. 链接
             elif node.name == 'a':
                 href = node.get('href', '')
                 new_marks.append({'type': 'link', 'href': href})
             
-            # 3. Span 样式 (Style 属性)
-            # 注意：其他标签也可能带有 style，所以统一检查 style 属性
-            # 但通常主要处理 span
+            # 3. 内联样式(从 style 属性提取)
             style_attr = node.get('style', '')
             if style_attr:
-                # 颜色
-                color_match = re.search(r'color:\s*([^;]+)', style_attr)
-                if color_match:
-                    new_marks.append({'type': 'value', 'name': 'color', 'value': color_match.group(1).strip()})
-                
-                # 背景色
+                # 背景色(必须先匹配,避免被 color 匹配)
                 bg_match = re.search(r'background(?:-color)?:\s*([^;]+)', style_attr)
                 if bg_match:
                     new_marks.append({'type': 'value', 'name': 'backgroundColor', 'value': bg_match.group(1).strip()})
+                
+                # 颜色(使用负向后顾断言,排除 background-color)
+                color_match = re.search(r'(?<!background-)color:\s*([^;]+)', style_attr)
+                if color_match:
+                    new_marks.append({'type': 'value', 'name': 'color', 'value': color_match.group(1).strip()})
                 
                 # 字号
                 size_match = re.search(r'font-size:\s*([^;]+)', style_attr)
@@ -442,36 +665,16 @@ class HtmlParser:
             # 递归遍历子节点
             for child in node.children:
                 traverse(child, new_marks)
-
+        
         # 开始递归
         traverse(element, [])
         
-        # 合并相邻且相同的 Mark (优化步骤，减少冗余 Mark)
-        # 这一步是可选的，但推荐加上，可以让数据更干净
-        final_marks = self._merge_marks(marks)
-        
-        return full_text, final_marks
-
-    def _merge_marks(self, marks: List[Mark]) -> List[Mark]:
-        """合并相同属性且相邻的标记"""
-        if not marks:
-            return []
-            
-        # 按类型和起始位置排序
-        # 这里的排序策略需要保证同类型的标记在一起比较
-        
-        # 简单策略：直接返回原标记，渲染器已经能处理重叠和碎片化
-        # 如果需要优化存储大小，可以在这里实现合并逻辑
-        # 目前为了稳定性，先不合并，因为 html_renderer 已经能完美处理碎片化标记
-        return marks
-
-    # 废弃的方法，保留占位以防调用出错 (实际上应该被移除)
-    def _get_text_range(self, parent: Tag, child: Tag) -> Optional[Tuple[int, int]]:
-        return None
+        return full_text, marks
     
-    def _extract_block_styles(self, element: Tag) -> Dict[str, Any]:
+    def _extract_user_block_styles(self, element: Tag) -> Dict[str, Any]:
         """
-        提取块级元素的样式
+        提取块级元素的用户明确设置的样式
+        (过滤掉浏览器默认样式)
         
         Args:
             element: HTML 元素
@@ -488,27 +691,26 @@ class HtmlParser:
         # 文本对齐
         align_match = re.search(r'text-align:\s*([^;]+)', style_attr)
         if align_match:
-            styles["textAlign"] = align_match.group(1).strip()
+            align = align_match.group(1).strip()
+            # 只保存非默认值
+            if align not in ['start', 'left']:
+                styles["textAlign"] = align
         
-        # 字号
-        size_match = re.search(r'font-size:\s*([^;]+)', style_attr)
-        if size_match:
-            size_str = size_match.group(1).strip()
-            # 尝试转换为数字（去除单位）
-            size_num = re.search(r'(\d+)', size_str)
-            if size_num:
-                styles["fontSize"] = int(size_num.group(1))
+        # 注意：字号(fontSize)和字体(fontFamily)不在段落级别提取
+        # 这些样式只在字符级别（marks）中处理，避免段落样式覆盖字符样式
         
-        # 颜色
-        color_match = re.search(r'color:\s*([^;]+)', style_attr)
+        # 颜色(使用负向后顾断言,排除 background-color)
+        color_match = re.search(r'(?<!background-)color:\s*([^;]+)', style_attr)
         if color_match:
-            styles["color"] = color_match.group(1).strip()
+            color = color_match.group(1).strip()
+            # 过滤默认黑色
+            if color not in ['rgb(0, 0, 0)', '#000000', '#000', 'black']:
+                styles["color"] = color
         
         # 行高
         line_height_match = re.search(r'line-height:\s*([^;]+)', style_attr)
         if line_height_match:
             lh_str = line_height_match.group(1).strip()
-            # 尝试转换为数字
             try:
                 styles["lineHeight"] = float(lh_str)
             except ValueError:
@@ -524,24 +726,101 @@ class HtmlParser:
         
         return styles
     
-    def _extract_table_styles(self, element: Tag) -> Dict[str, Any]:
+    def _extract_cell_user_styles(self, cell: Tag) -> Dict[str, Any]:
         """
-        提取表格级样式
+        提取单元格用户明确设置的样式
         
         Args:
-            element: table 元素
+            cell: td/th 元素
             
         Returns:
             样式字典
         """
         styles = {}
-        style_attr = element.get('style', '')
+        style_attr = cell.get('style', '')
+        
+        # 文本对齐
+        text_align = None
+        if 'text-align' in style_attr:
+            align_match = re.search(r'text-align:\s*([^;]+)', style_attr)
+            if align_match:
+                text_align = align_match.group(1).strip()
+        elif cell.get('align'):
+            text_align = cell.get('align')
+        
+        if text_align and text_align not in ['start', 'left']:
+            styles["textAlign"] = text_align
+        
+        # 垂直对齐
+        vertical_align = None
+        if 'vertical-align' in style_attr:
+            valign_match = re.search(r'vertical-align:\s*([^;]+)', style_attr)
+            if valign_match:
+                vertical_align = valign_match.group(1).strip()
+        elif cell.get('valign'):
+            vertical_align = cell.get('valign')
+        
+        if vertical_align and vertical_align != 'baseline':
+            styles["verticalAlign"] = vertical_align
+        
+        # 字体
+        family_match = re.search(r'font-family:\s*([^;]+)', style_attr)
+        if family_match:
+            styles["fontFamily"] = family_match.group(1).strip()
+        
+        # 字号
+        size_match = re.search(r'font-size:\s*([^;]+)', style_attr)
+        if size_match:
+            size_str = size_match.group(1).strip()
+            size_num = re.search(r'(\d+)', size_str)
+            if size_num:
+                styles["fontSize"] = int(size_num.group(1))
+        
+        # 字体粗细
+        weight_match = re.search(r'font-weight:\s*([^;]+)', style_attr)
+        if weight_match:
+            weight = weight_match.group(1).strip()
+            if weight not in ['normal', '400']:
+                styles["fontWeight"] = weight
+        
+        # 文本颜色(使用负向后顾断言,排除 background-color)
+        color_match = re.search(r'(?<!background-)color:\s*([^;]+)', style_attr)
+        if color_match:
+            color = color_match.group(1).strip()
+            if color not in ['rgb(0, 0, 0)', '#000000', '#000', 'black']:
+                styles["color"] = color
+        
+        # 背景颜色
+        bg_color = None
+        if 'background-color' in style_attr or 'background:' in style_attr:
+            bg_match = re.search(r'background(?:-color)?:\s*([^;]+)', style_attr)
+            if bg_match:
+                bg_color = bg_match.group(1).strip()
+        elif cell.get('bgcolor'):
+            bg_color = cell.get('bgcolor')
+        
+        if bg_color and bg_color not in ['transparent', 'rgba(0, 0, 0, 0)']:
+            styles["backgroundColor"] = bg_color
+        
+        return styles
+    
+    def _extract_table_styles(self, table: Tag) -> Dict[str, Any]:
+        """
+        提取表格级样式
+        
+        Args:
+            table: table 元素
+            
+        Returns:
+            样式字典
+        """
+        styles = {}
+        style_attr = table.get('style', '')
         
         # 边框
         border_match = re.search(r'border:\s*([^;]+)', style_attr)
         if border_match:
             border_str = border_match.group(1).strip()
-            # 解析 "1px solid #ccc" 格式
             parts = border_str.split()
             if len(parts) >= 3:
                 width_match = re.search(r'\d+', parts[0])
@@ -553,7 +832,14 @@ class HtmlParser:
         # 宽度
         width_match = re.search(r'width:\s*([^;]+)', style_attr)
         if width_match:
-            styles["width"] = width_match.group(1).strip()
+            width = width_match.group(1).strip()
+            if width != 'auto':
+                styles["width"] = width
+        
+        # 边框折叠
+        collapse_match = re.search(r'border-collapse:\s*([^;]+)', style_attr)
+        if collapse_match:
+            styles["borderCollapse"] = collapse_match.group(1).strip()
         
         return styles
     
@@ -562,7 +848,9 @@ class HtmlParser:
         block_id: str, 
         block_type: str, 
         styles: Dict[str, Any],
-        level: Optional[int] = None
+        level: Optional[int] = None,
+        column_index: Optional[int] = None,
+        cell_type: Optional[str] = None
     ):
         """
         添加样式规则到 StyleSheet
@@ -571,7 +859,9 @@ class HtmlParser:
             block_id: Block ID
             block_type: Block 类型
             styles: 样式字典
-            level: 标题层级（可选）
+            level: 标题层级(可选)
+            column_index: 列索引(可选,用于表格列)
+            cell_type: 单元格类型(可选,'td' 或 'th')
         """
         # 构建 StyleTarget
         target = StyleTarget(
@@ -581,6 +871,12 @@ class HtmlParser:
         
         if level is not None:
             target.level = level
+        
+        if column_index is not None:
+            target.columnIndex = column_index
+        
+        if cell_type is not None:
+            target.cellType = cell_type
         
         # 构建 StyleDeclaration
         style_declaration = StyleDeclaration(**styles)
@@ -592,3 +888,20 @@ class HtmlParser:
         )
         
         self.style_rules.append(rule)
+
+
+# 导出便捷函数
+def parse_html_to_json(html_content: str) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    """
+    便捷函数: 将 HTML 解析为 JSON 字典
+    
+    Args:
+        html_content: HTML 字符串
+        
+    Returns:
+        (content_dict, stylesheet_dict) 元组
+    """
+    parser = HtmlParser(html_content)
+    content, stylesheet = parser.parse()
+    
+    return content.model_dump(), stylesheet.model_dump()
