@@ -1,0 +1,66 @@
+version: '3.8'
+
+services:
+  # MySQL 数据库
+  mysql:
+    image: mysql:8.0
+    container_name: word_editor_mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: word_editor
+      MYSQL_USER: word_user
+      MYSQL_PASSWORD: word_pass
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - word_editor_network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 后端 API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: word_editor_backend
+    environment:
+      DATABASE_URL: mysql+pymysql://word_user:word_pass@mysql:3306/word_editor
+      DEBUG: "True"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - ./uploads:/app/uploads
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - word_editor_network
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # 前端（可选）
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: word_editor_frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    networks:
+      - word_editor_network
+    command: npm run dev -- --host
+
+volumes:
+  mysql_data:
+
+networks:
+  word_editor_network:
+    driver: bridge
