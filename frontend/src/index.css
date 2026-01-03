@@ -30,16 +30,55 @@ h4 {
   color: #333;
 }
 
-/* 防止影响 WangEditor 工具栏按钮 */
-/* button {
-  transition: all 0.3s;
+/* WangEditor 默认样式定义
+ * 注意：这些值应与 src/config/editorDefaults.ts 中的配置保持一致
+ * 默认字体：Microsoft YaHei (微软雅黑)
+ * 默认字号：16px
+ * 默认行高：1.5
+ */
+.w-e-text-container [data-slate-editor] {
+  font-family: "Microsoft YaHei", "Heiti SC", sans-serif !important;
+  font-size: 16px !important;
+  line-height: 1.5 !important;
+  color: #333;
 }
 
-button:hover:not(:disabled) {
-  opacity: 0.8;
-  transform: translateY(-1px);
+/* 确保段落继承这些默认值 */
+.w-e-text-container p {
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  margin: 10px 0;
 }
 
-button:disabled {
-  opacity: 0.6;
-} */
+/* ==========================================================================
+   WANGEDITOR 样式修复
+   ========================================================================== */
+
+/* 修复：确保加粗(Bold)和下划线(Underline)同时使用时能正确显示 */
+.w-e-text-container strong,
+.w-e-text-container b {
+  font-weight: bold;
+}
+
+.w-e-text-container u {
+  text-decoration: underline;
+}
+
+/* 强制嵌套样式生效，解决某些情况下样式丢失的问题 */
+.w-e-text-container strong u,
+.w-e-text-container u strong,
+.w-e-text-container b u,
+.w-e-text-container u b {
+  font-weight: bold !important;
+  text-decoration: underline !important;
+}
+
+/* 兼容 span 内联样式 */
+.w-e-text-container span[style*="font-weight: bold"] {
+  font-weight: bold !important;
+}
+
+.w-e-text-container span[style*="text-decoration: underline"] {
+  text-decoration: underline !important;
+}

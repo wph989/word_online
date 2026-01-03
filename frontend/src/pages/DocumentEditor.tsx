@@ -166,6 +166,22 @@ const DocumentEditor: React.FC = () => {
           <h1>{docTitle} <small>{chapter ? `- ${chapter.title}` : ''}</small></h1>
         </div>
         <div className="header-actions">
+          <button 
+            className="save-btn" 
+            onClick={() => chapter && chapterService.exportChapterToDocx(chapter.id)} 
+            disabled={!chapter}
+            style={{ backgroundColor: '#28a745', marginRight: '10px' }}
+          >
+            导出章节
+          </button>
+          <button 
+            className="save-btn" 
+            onClick={() => docId && chapterService.exportDocumentToDocx(docId)} 
+            disabled={!docId}
+            style={{ backgroundColor: '#17a2b8', marginRight: '10px' }}
+          >
+            导出文档
+          </button>
           <button className="save-btn" onClick={handleSave} disabled={saving || !chapter}>
             {saving ? '保存中...' : '保存'}
           </button>

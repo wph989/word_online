@@ -5,8 +5,7 @@ import './DocumentList.css';
 
 const DocumentList: React.FC = () => {
   const [documents, setDocuments] = useState<any[]>([]);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [total, setTotal] = useState(0);
+  // const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
@@ -19,8 +18,7 @@ const DocumentList: React.FC = () => {
     setLoading(true);
     try {
       const res = await chapterService.getDocumentsList(page, 10);
-      setDocuments(res.items);
-      setTotal(res.total);
+      setDocuments(res.items); // setTotal(res.total);
     } catch (err) {
       console.error(err);
     } finally {
@@ -59,6 +57,16 @@ const DocumentList: React.FC = () => {
                 <p style={{marginTop: 5, fontSize: 10}}>
                   {doc.created_at ? new Date(doc.created_at).toLocaleDateString() : ''}
                 </p>
+                <button 
+                  className="doc-action-btn"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    chapterService.exportDocumentToDocx(doc.id);
+                  }}
+                >
+                  导出 Word
+                </button>
               </div>
             </Link>
           ))}

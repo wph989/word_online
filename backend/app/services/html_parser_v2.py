@@ -696,13 +696,8 @@ class HtmlParserV2:
             if align not in ['start', 'left']:
                 styles["textAlign"] = align
         
-        # 字号
-        size_match = re.search(r'font-size:\s*([^;]+)', style_attr)
-        if size_match:
-            size_str = size_match.group(1).strip()
-            size_num = re.search(r'(\d+)', size_str)
-            if size_num:
-                styles["fontSize"] = int(size_num.group(1))
+        # 注意：字号(fontSize)和字体(fontFamily)不在段落级别提取
+        # 这些样式只在字符级别（marks）中处理，避免段落样式覆盖字符样式
         
         # 颜色(使用负向后顾断言,排除 background-color)
         color_match = re.search(r'(?<!background-)color:\s*([^;]+)', style_attr)

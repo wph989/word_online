@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Editor, Toolbar } from '@wangeditor/editor-for-react';
 import { IDomEditor, IEditorConfig, IToolbarConfig } from '@wangeditor/editor';
 import '@wangeditor/editor/dist/css/style.css';
+import { EDITOR_DEFAULTS, getDisplayFontName } from '../config/editorDefaults';
 
 interface EditorProps {
   html: string;
@@ -11,7 +12,15 @@ interface EditorProps {
 
 export default function EditorComponent({ html, onChange, readOnly = false }: EditorProps) {
   const [editor, setEditor] = useState<IDomEditor | null>(null);
+  const [showHint, setShowHint] = useState(true); // 控制默认样式提示条的显示
   const editorContainerRef = useRef<HTMLDivElement>(null);
+  
+  // 状态栏信息
+  const [editorStatus, setEditorStatus] = useState({
+    fontFamily: '默认字体',
+    fontSize: '16px',
+    lineHeight: '1.5'
+  });
 
   // 工具栏配置
   const toolbarConfig: Partial<IToolbarConfig> = {
@@ -179,6 +188,47 @@ export default function EditorComponent({ html, onChange, readOnly = false }: Ed
       // 简化处理：只在初始化或切换章节时更新
     }
   }, [html, editor]);
+  
+  // 监听编辑器选区变化，更新状态栏
+  useEffect(() => {
+    if (!editor) return;
+    
+    const updateStatus = () => {
+      try {
+        // 获取编辑器容器中的当前选中元素
+        const selection = window.getSelection();
+        if (!selection || selection.rangeCount === 0) return;
+        
+        const range = selection.getRangeAt(0);
+        let node = range.startContainer;
+        
+        // 如果是文本节点，获取其父元素
+        if (node.nodeType === Node.TEXT_NODE) {
+          node = node.parentElement!;
+        }
+        
+        const computedStyle = window.getComputedStyle(node as Element);
+        
+        setEditorStatus({
+          fontFamily: computedStyle.fontFamily.replace(/['"]/g, '') || '默认字体',
+          fontSize: computedStyle.fontSize || '16px',
+          lineHeight: computedStyle.lineHeight || '1.5'
+        });
+      } catch (e) {
+        // 忽略错误
+      }
+    };
+    
+    // 初始更新
+    updateStatus();
+    
+    // 监听选区变化
+    editor.on('selectionChange', updateStatus);
+    
+    return () => {
+      editor.off('selectionChange', updateStatus);
+    };
+  }, [editor]);
 
   // 组件销毁时，销毁编辑器
   useEffect(() => {
@@ -205,8 +255,72 @@ export default function EditorComponent({ html, onChange, readOnly = false }: Ed
         editor={editor}
         defaultConfig={toolbarConfig}
         mode="default"
-        style={{ borderBottom: '1px solid #ccc' }}
+        style={{ borderBottom: '1px solid #e8e8e8' }}
       />
+      
+      {/* 默认样式显式提示条 - 可收起 */}
+      {showHint ? (
+        <div style={{
+          backgroundColor: '#e6f7ff',
+          borderBottom: '1px solid #91d5ff',
+          padding: '8px 16px',
+          fontSize: '13px',
+          color: '#0050b3',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          transition: 'all 0.3s'
+        }}>
+          <span style={{ fontSize: '16px' }}>💡</span>
+          <span><strong>文档默认样式：</strong></span>
+          <span style={{ background: 'rgba(255,255,255,0.6)', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(0,0,0,0.05)' }}>
+            字体 {getDisplayFontName()}
+          </span>
+          <span style={{ background: 'rgba(255,255,255,0.6)', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(0,0,0,0.05)' }}>
+            字号 {EDITOR_DEFAULTS.fontSize}
+          </span>
+          <span style={{ background: 'rgba(255,255,255,0.6)', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(0,0,0,0.05)' }}>
+            行高 {EDITOR_DEFAULTS.lineHeight}
+          </span>
+          <span style={{ marginLeft: 'auto', color: '#69c0ff', fontSize: '12px' }}>* 当工具栏显示"默认"时即使用上述值</span>
+          <span 
+            onClick={() => setShowHint(false)} 
+            style={{ 
+              cursor: 'pointer', 
+              marginLeft: '10px', 
+              color: '#1890ff',
+              display: 'flex',
+              alignItems: 'center',
+              userSelect: 'none'
+            }}
+            title="收起提示"
+          >
+            收起 🔼
+          </span>
+        </div>
+      ) : (
+        <div 
+          onClick={() => setShowHint(true)}
+          style={{
+            backgroundColor: '#f0faff',
+            borderBottom: '1px solid #e6f7ff',
+            padding: '2px 16px',
+            fontSize: '12px',
+            color: '#91d5ff',
+            cursor: 'pointer',
+            textAlign: 'center',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            gap: '5px',
+            transition: 'all 0.3s'
+          }}
+          title="展开默认样式提示"
+        >
+          <span>💡 默认样式: {getDisplayFontName()} / {EDITOR_DEFAULTS.fontSize} / {EDITOR_DEFAULTS.lineHeight}</span>
+          <span>🔽</span>
+        </div>
+      )}
       <div style={{ flex: 1, overflowY: 'auto', position: 'relative' }}>
         <Editor
           defaultConfig={editorConfig}
@@ -216,6 +330,25 @@ export default function EditorComponent({ html, onChange, readOnly = false }: Ed
           mode="default"
           style={{ minHeight: '100%' }} // 移除 fixed height 和 overflow hidden，允许自动撑开
         />
+      </div>
+      
+      {/* 状态栏 */}
+      <div style={{
+        borderTop: '1px solid #e8e8e8',
+        padding: '6px 16px',
+        fontSize: '12px',
+        color: '#666',
+        backgroundColor: '#fafafa',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '24px',
+        boxShadow: '0 -1px 2px rgba(0,0,0,0.03)'
+      }}>
+        <span style={{ fontWeight: 600, color: '#1890ff' }}>当前实际渲染:</span>
+        <span title="字体">🔤 {editorStatus.fontFamily.split(',')[0].replace(/['"]/g, '')}</span>
+        <span title="字号">📏 {editorStatus.fontSize}</span>
+        <span title="行高">↕️ {editorStatus.lineHeight}</span>
+        <span style={{ marginLeft: 'auto', color: '#999' }}>（未设置样式时使用默认值：微软雅黑, 16px, 1.5）</span>
       </div>
     </div>
   );

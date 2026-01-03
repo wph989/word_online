@@ -6,7 +6,7 @@
 import axios from 'axios';
 
 // 从环境变量读取后端 API 地址
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/+$/, '');
 
 // 配置 axios 实例
 const api = axios.create({
@@ -92,12 +92,14 @@ export const chapterService = {
   },
 
   // 导出
-  exportChapterToDocx: (chapterId: string) => {
-    window.open(`${API_BASE_URL}/api/v1/export/chapters/${chapterId}/docx`, '_blank');
+  exportChapterToDocx: (chapterId: string, includeTitle = true) => {
+    const url = `${API_BASE_URL}/api/v1/export/chapters/${chapterId}/docx?include_title=${includeTitle}`;
+    window.open(url, '_blank');
   },
 
-  exportDocumentToDocx: (docId: string) => {
-    window.open(`${API_BASE_URL}/api/v1/export/documents/${docId}/docx`, '_blank');
+  exportDocumentToDocx: (docId: string, includeChapterTitles = true, chapterTitleLevel = 1) => {
+    const url = `${API_BASE_URL}/api/v1/export/documents/${docId}/docx?include_chapter_titles=${includeChapterTitles}&chapter_title_level=${chapterTitleLevel}`;
+    window.open(url, '_blank');
   }
 };
 
