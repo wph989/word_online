@@ -13,15 +13,29 @@ interface EditorProps {
 export default function EditorComponent({ html, onChange, readOnly = false }: EditorProps) {
   const [editor, setEditor] = useState<IDomEditor | null>(null);
   const [showHint, setShowHint] = useState(true); // 控制默认样式提示条的显示
-  const editorContainerRef = useRef<HTMLDivElement>(null);
   
-  // 状态栏信息
-  const [editorStatus, setEditorStatus] = useState({
-    fontFamily: '默认字体',
-    fontSize: '16px',
-    lineHeight: '1.5'
+  // 页面边距状态 (单位: px)
+  const [pageMargins, setPageMargins] = useState({
+    top: 40,
+    bottom: 40,
+    left: 50,
+    right: 50
   });
 
+  // 标题样式状态 (H1-H6)
+  const [headingStyles, setHeadingStyles] = useState({
+    h1: { fontSize: 24, fontWeight: 'bold', color: '#1890ff', marginTop: 24, marginBottom: 12 },
+    h2: { fontSize: 22, fontWeight: 'bold', color: '#333333', marginTop: 20, marginBottom: 10 },
+    h3: { fontSize: 20, fontWeight: 'bold', color: '#333333', marginTop: 16, marginBottom: 8 },
+    h4: { fontSize: 18, fontWeight: 'bold', color: '#333333', marginTop: 14, marginBottom: 6 },
+    h5: { fontSize: 16, fontWeight: 'bold', color: '#333333', marginTop: 12, marginBottom: 4 },
+    h6: { fontSize: 14, fontWeight: 'bold', color: '#666666', marginTop: 10, marginBottom: 2 },
+  });
+
+  const [showPageSettings, setShowPageSettings] = useState(false);
+  
+  const editorContainerRef = useRef<HTMLDivElement>(null);
+  
   // 工具栏配置
   const toolbarConfig: Partial<IToolbarConfig> = {
     excludeKeys: [
@@ -35,85 +49,57 @@ export default function EditorComponent({ html, onChange, readOnly = false }: Ed
     readOnly,
     MENU_CONF: {
       uploadImage: {
-        // 上传图片的服务器地址
         server: '/api/v1/upload/image',
-
-        // 单个文件的最大体积限制，默认为 2M
-        maxFileSize: 5 * 1024 * 1024, // 5M
-
-        // 最多可上传几个文件，默认为 100
+        maxFileSize: 5 * 1024 * 1024,
         maxNumberOfFiles: 10,
-
-        // 选择文件时的类型限制，默认为 ['image/*']
         allowedFileTypes: ['image/*'],
-
-        // 自定义上传参数，例如传递验证的 token 等
-        meta: {
-          // token: 'xxx',
-        },
-
-        // 将 meta 拼接到 url 参数中，默认 false
         metaWithUrl: false,
-
-        // 自定义增加 http  header
-        headers: {
-          // Accept: 'text/x-json',
-        },
-
-        // 跨域是否传递 cookie ，默认为 false
         withCredentials: false,
-
-        // 超时时间，默认为 10 秒
-        timeout: 10 * 1000, // 10 秒
-
-        // 上传之前触发
+        timeout: 10 * 1000,
         onBeforeUpload(file: File) {
-          console.log('上传图片前:', file);
-          return file; // 返回 false 会阻止上传
+          return file;
         },
-
-        // 上传进度的回调函数
-        onProgress(progress: number) {
-          console.log('上传进度:', progress);
-        },
-
-        // 单个文件上传成功之后
-        onSuccess(file: File, res: any) {
-          console.log('上传成功:', file.name, res);
-        },
-
-        // 单个文件上传失败
-        onFailed(file: File, res: any) {
-          console.error('上传失败:', file.name, res);
-          alert(`图片 ${file.name} 上传失败`);
-        },
-
-        // 上传错误，或者触发 timeout 超时
-        onError(file: File, err: any, res: any) {
-          console.error('上传出错:', file.name, err, res);
-          alert(`图片 ${file.name} 上传出错`);
-        },
-
-        // 自定义插入图片
         customInsert(res: any, insertFn: (url: string, alt: string, href: string) => void) {
-          // res 即服务端的返回结果
-          console.log('服务器返回:', res);
-
-          // 从返回结果中获取图片 url
           const url = res.data?.url || res.url;
-          const alt = res.data?.alt || '';
-          const href = res.data?.href || '';
-
-          if (url) {
-            // 插入图片到编辑器
-            insertFn(url, alt, href);
-          } else {
-            alert('上传成功但未返回图片地址');
-          }
+          if (url) insertFn(url, '', '');
         },
       },
     },
   };
+  
+  // 生成动态样式标签
+  const renderDynamicStyles = () => (
+    <style>{`
+      /* 动态注入标题样式 H1-H6 */
+      ${['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].map(tag => {
+        // @ts-ignore
+        const style = headingStyles[tag];
+        return `
+          /* 1. 应用到标题容器 */
+          .w-e-text-container [data-slate-editor] ${tag},
+          .w-e-text-container .w-e-scroll ${tag},
+          .w-e-text-container ${tag} {
+            font-size: ${style.fontSize}px !important;
+            font-weight: ${style.fontWeight} !important;
+            color: ${style.color} !important;
+            margin-top: ${style.marginTop}px !important;
+            margin-bottom: ${style.marginBottom}px !important;
+            line-height: 1.5 !important;
+          }
+
+          /* 2. 强制标题内部所有子元素继承父级样式 (解决内联样式冲突) */
+          .w-e-text-container [data-slate-editor] ${tag} *,
+          .w-e-text-container .w-e-scroll ${tag} *,
+          .w-e-text-container ${tag} * {
+            font-size: inherit !important;
+            font-weight: inherit !important;
+            color: inherit !important;
+            background-color: transparent !important; /* 可选：清除背景色干扰 */
+          }
+        `;
+      }).join('\n')}
+    `}</style>
+  );
 
   // 从 DOM 提取表格列宽度并注入到 HTML
   const extractTableWidths = (currentHtml: string): string => {
@@ -128,6 +114,8 @@ export default function EditorComponent({ html, onChange, readOnly = false }: Ed
       if (tables.length === 0) return currentHtml;
 
       let modifiedHtml = currentHtml;
+      // 移除可能存在的旧 metadata
+      modifiedHtml = modifiedHtml.replace(/<div id="doc-settings".*?><\/div>/, '');
 
       tables.forEach((table, tableIndex) => {
         const firstRow = table.querySelector('tr');
@@ -182,59 +170,61 @@ export default function EditorComponent({ html, onChange, readOnly = false }: Ed
     }
   };
 
-  // 监听外部 html 变化更新编辑器
+  // 监听外部 html 变化更新编辑器 (包含解析页面设置)
   useEffect(() => {
-    if (editor && html !== editor.getHtml()) {
-      // 简化处理：只在初始化或切换章节时更新
+    if (editor && html) {
+      // 1. 尝试解析页面设置元数据
+      try {
+        const match = html.match(/<div id="doc-settings".*?data-settings='(.*?)'.*?><\/div>/);
+        if (match && match[1]) {
+           let settingsStr = match[1];
+           let settings;
+           try {
+              // 尝试 Base64 解码
+              const decoded = atob(settingsStr);
+              settings = JSON.parse(decoded);
+           } catch {
+              // 不是 Base64，尝试直接解析
+              settings = JSON.parse(settingsStr); 
+           }
+           
+           if (settings) {
+             if (settings.margins) setPageMargins(settings.margins);
+             if (settings.headingStyles) setHeadingStyles(settings.headingStyles);
+           }
+        }
+      } catch (e) {
+        console.error('解析页面设置失败:', e);
+      }
+
+      // 2. 剥离元数据后设置给编辑器
+      // 注意：必须非常小心地比较，以避免死循环和重置光标
+      const cleanHtml = html.replace(/<div id="doc-settings".*?><\/div>/g, '');
+      
+      try {
+        const currentContent = editor.getHtml().replace(/<div id="doc-settings".*?><\/div>/g, '');
+        if (cleanHtml !== currentContent) {
+           // 只有在内容确实不同且编辑器可用时才更新
+           // @ts-ignore - 检查私有属性或捕获错误
+           if (!editor.isDestroyed) {
+             editor.setHtml(cleanHtml);
+           }
+        }
+      } catch (e) {
+        console.warn('更新编辑器内容时出错 (通常可忽略):', e);
+      }
     }
   }, [html, editor]);
-  
-  // 监听编辑器选区变化，更新状态栏
-  useEffect(() => {
-    if (!editor) return;
-    
-    const updateStatus = () => {
-      try {
-        // 获取编辑器容器中的当前选中元素
-        const selection = window.getSelection();
-        if (!selection || selection.rangeCount === 0) return;
-        
-        const range = selection.getRangeAt(0);
-        let node = range.startContainer;
-        
-        // 如果是文本节点，获取其父元素
-        if (node.nodeType === Node.TEXT_NODE) {
-          node = node.parentElement!;
-        }
-        
-        const computedStyle = window.getComputedStyle(node as Element);
-        
-        setEditorStatus({
-          fontFamily: computedStyle.fontFamily.replace(/['"]/g, '') || '默认字体',
-          fontSize: computedStyle.fontSize || '16px',
-          lineHeight: computedStyle.lineHeight || '1.5'
-        });
-      } catch (e) {
-        // 忽略错误
-      }
-    };
-    
-    // 初始更新
-    updateStatus();
-    
-    // 监听选区变化
-    editor.on('selectionChange', updateStatus);
-    
-    return () => {
-      editor.off('selectionChange', updateStatus);
-    };
-  }, [editor]);
 
   // 组件销毁时，销毁编辑器
   useEffect(() => {
     return () => {
       if (editor) {
-        editor.destroy();
+        try {
+            editor.destroy();
+        } catch(e) {
+            // ignore destroy errors
+        }
         setEditor(null);
       }
     };
@@ -242,21 +232,203 @@ export default function EditorComponent({ html, onChange, readOnly = false }: Ed
 
   const handleChange = (editor: IDomEditor) => {
     let currentHtml = editor.getHtml();
+    
+    // 移除编辑器可能包含的旧 metadata (防止重复)
+    currentHtml = currentHtml.replace(/<div id="doc-settings".*?><\/div>/g, '');
 
-    // 提取并注入表格列宽
+    // 1. 提取并注入表格列宽
     currentHtml = extractTableWidths(currentHtml);
+    
+    // 2. 序列化并注入页面设置
+    const settings = {
+      margins: pageMargins,
+      headingStyles: headingStyles
+    };
+    try {
+      // 使用 Base64 编码避免 HTML 属性转义问题
+      const settingsStr = btoa(JSON.stringify(settings));
+      const metadataHtml = `<div id="doc-settings" style="display:none" data-settings='${settingsStr}'></div>`;
+      currentHtml = metadataHtml + currentHtml;
+    } catch (e) {
+      console.error('序列化页面设置失败:', e);
+    }
 
     onChange?.(currentHtml);
   };
 
   return (
-    <div ref={editorContainerRef} style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <Toolbar
-        editor={editor}
-        defaultConfig={toolbarConfig}
-        mode="default"
-        style={{ borderBottom: '1px solid #e8e8e8' }}
-      />
+    <div 
+      ref={editorContainerRef} 
+      style={{ 
+        display: 'flex', 
+        flexDirection: 'column', 
+        height: '100%',
+        // 注入 CSS 变量
+        // @ts-ignore
+        '--page-margin-top': `${pageMargins.top}px`,
+        '--page-margin-right': `${pageMargins.right}px`,
+        '--page-margin-bottom': `${pageMargins.bottom}px`,
+        '--page-margin-left': `${pageMargins.left}px`
+      }}
+    >
+      {renderDynamicStyles()}
+      <div style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid #e8e8e8' }}>
+        <div style={{ flex: 1 }}>
+          <Toolbar
+            editor={editor}
+            defaultConfig={toolbarConfig}
+            mode="default"
+            style={{ borderBottom: 'none' }}
+          />
+        </div>
+        <button 
+          onClick={() => setShowPageSettings(!showPageSettings)}
+          style={{
+            padding: '5px 15px',
+            margin: '0 10px',
+            border: '1px solid #d9d9d9',
+            background: showPageSettings ? '#e6f7ff' : '#fff',
+            color: showPageSettings ? '#1890ff' : '#666',
+            cursor: 'pointer',
+            borderRadius: '4px',
+            fontSize: '13px',
+            whiteSpace: 'nowrap'
+          }}
+        >
+           🛠️ 文档设置
+        </button>
+      </div>
+
+      {/* 文档设置面板 */}
+      {showPageSettings && (
+        <div style={{
+          padding: '16px 20px',
+          background: '#fafafa',
+          borderBottom: '1px solid #e8e8e8',
+          fontSize: '13px',
+          color: '#333',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '12px',
+          maxHeight: '300px',
+          overflowY: 'auto'
+        }}>
+          {/* 页边距区域 */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '20px', borderBottom: '1px solid #eee', paddingBottom: '10px' }}>
+            <strong style={{ minWidth: '80px' }}>页边距 (px):</strong>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <label>上:</label>
+              <input type="number" value={pageMargins.top} onChange={e => setPageMargins({...pageMargins, top: Number(e.target.value)})} style={{ width: '50px', padding: '4px', border: '1px solid #d9d9d9', borderRadius: '4px' }} />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <label>下:</label>
+              <input type="number" value={pageMargins.bottom} onChange={e => setPageMargins({...pageMargins, bottom: Number(e.target.value)})} style={{ width: '50px', padding: '4px', border: '1px solid #d9d9d9', borderRadius: '4px' }} />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <label>左:</label>
+              <input type="number" value={pageMargins.left} onChange={e => setPageMargins({...pageMargins, left: Number(e.target.value)})} style={{ width: '50px', padding: '4px', border: '1px solid #d9d9d9', borderRadius: '4px' }} />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <label>右:</label>
+              <input type="number" value={pageMargins.right} onChange={e => setPageMargins({...pageMargins, right: Number(e.target.value)})} style={{ width: '50px', padding: '4px', border: '1px solid #d9d9d9', borderRadius: '4px' }} />
+            </div>
+          </div>
+
+          {/* 标题样式区域 */}
+          {[
+            { key: 'h1', label: '一级标题 (H1)' },
+            { key: 'h2', label: '二级标题 (H2)' },
+            { key: 'h3', label: '三级标题 (H3)' },
+            { key: 'h4', label: '四级标题 (H4)' },
+            { key: 'h5', label: '五级标题 (H5)' },
+            { key: 'h6', label: '六级标题 (H6)' }
+          ].map(h => (
+            //@ts-ignore
+            <div key={h.key} style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+              <strong style={{ minWidth: '80px' }}>{h.label}:</strong>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <span>字号</span>
+                <input 
+                  type="number" 
+                  //@ts-ignore
+                  value={headingStyles[h.key].fontSize} 
+                  //@ts-ignore
+                  onChange={e => setHeadingStyles({...headingStyles, [h.key]: { ...headingStyles[h.key], fontSize: Number(e.target.value) }})}
+                  style={{ width: '50px', padding: '4px', border: '1px solid #d9d9d9', borderRadius: '4px' }} 
+                />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <span>颜色</span>
+                <input 
+                  type="color" 
+                  //@ts-ignore
+                  value={headingStyles[h.key].color} 
+                  //@ts-ignore
+                  onChange={e => setHeadingStyles({...headingStyles, [h.key]: { ...headingStyles[h.key], color: e.target.value }})}
+                  style={{ width: '40px', padding: '0', border: 'none', background: 'none', cursor: 'pointer' }} 
+                />
+              </div>
+               <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <span>加粗</span>
+                <input 
+                  type="checkbox" 
+                  //@ts-ignore
+                  checked={headingStyles[h.key].fontWeight === 'bold'} 
+                  //@ts-ignore
+                  onChange={e => setHeadingStyles({...headingStyles, [h.key]: { ...headingStyles[h.key], fontWeight: e.target.checked ? 'bold' : 'normal' }})}
+                />
+              </div>
+               <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <span>段前/后</span>
+                <input 
+                  type="number" 
+                  //@ts-ignore
+                  value={headingStyles[h.key].marginTop} 
+                  //@ts-ignore
+                  onChange={e => setHeadingStyles({...headingStyles, [h.key]: { ...headingStyles[h.key], marginTop: Number(e.target.value) }})}
+                  style={{ width: '40px', padding: '4px', border: '1px solid #d9d9d9', borderRadius: '4px' }} 
+                  title="段前距"
+                />
+                <input 
+                  type="number" 
+                  //@ts-ignore
+                  value={headingStyles[h.key].marginBottom} 
+                  //@ts-ignore
+                  onChange={e => setHeadingStyles({...headingStyles, [h.key]: { ...headingStyles[h.key], marginBottom: Number(e.target.value) }})}
+                  style={{ width: '40px', padding: '4px', border: '1px solid #d9d9d9', borderRadius: '4px' }} 
+                  title="段后距"
+                />
+              </div>
+            </div>
+          ))}
+
+          <button 
+            onClick={() => {
+              setPageMargins({ top: 40, bottom: 40, left: 50, right: 50 });
+              setHeadingStyles({
+                h1: { fontSize: 24, fontWeight: 'bold', color: '#333333', marginTop: 24, marginBottom: 12 },
+                h2: { fontSize: 22, fontWeight: 'bold', color: '#333333', marginTop: 20, marginBottom: 10 },
+                h3: { fontSize: 20, fontWeight: 'bold', color: '#333333', marginTop: 16, marginBottom: 8 },
+                h4: { fontSize: 18, fontWeight: 'bold', color: '#333333', marginTop: 14, marginBottom: 6 },
+                h5: { fontSize: 16, fontWeight: 'bold', color: '#333333', marginTop: 12, marginBottom: 4 },
+                h6: { fontSize: 14, fontWeight: 'bold', color: '#333333', marginTop: 10, marginBottom: 2 },
+              });
+            }}
+            style={{ 
+              alignSelf: 'flex-start',
+              padding: '6px 16px', 
+              background: '#fff', 
+              border: '1px solid #d9d9d9', 
+              cursor: 'pointer',
+              borderRadius: '4px',
+              color: '#666',
+              marginTop: '10px'
+            }}
+          >
+            重置所有设置
+          </button>
+        </div>
+      )}
       
       {/* 默认样式显式提示条 - 可收起 */}
       {showHint ? (
@@ -321,34 +493,15 @@ export default function EditorComponent({ html, onChange, readOnly = false }: Ed
           <span>🔽</span>
         </div>
       )}
-      <div style={{ flex: 1, overflowY: 'auto', position: 'relative' }}>
+      <div style={{ flex: 1, overflow: 'auto', position: 'relative' }}>
         <Editor
           defaultConfig={editorConfig}
           value={html}
           onCreated={setEditor}
           onChange={handleChange}
           mode="default"
-          style={{ minHeight: '100%' }} // 移除 fixed height 和 overflow hidden，允许自动撑开
+          style={{ minHeight: '100%', overflowY: 'hidden' }}
         />
-      </div>
-      
-      {/* 状态栏 */}
-      <div style={{
-        borderTop: '1px solid #e8e8e8',
-        padding: '6px 16px',
-        fontSize: '12px',
-        color: '#666',
-        backgroundColor: '#fafafa',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '24px',
-        boxShadow: '0 -1px 2px rgba(0,0,0,0.03)'
-      }}>
-        <span style={{ fontWeight: 600, color: '#1890ff' }}>当前实际渲染:</span>
-        <span title="字体">🔤 {editorStatus.fontFamily.split(',')[0].replace(/['"]/g, '')}</span>
-        <span title="字号">📏 {editorStatus.fontSize}</span>
-        <span title="行高">↕️ {editorStatus.lineHeight}</span>
-        <span style={{ marginLeft: 'auto', color: '#999' }}>（未设置样式时使用默认值：微软雅黑, 16px, 1.5）</span>
       </div>
     </div>
   );

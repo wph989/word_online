@@ -1,113 +1,101 @@
 .sidebar {
-  width: 240px;
-  background-color: #fcfcfc;
-  border-right: 1px solid #e1e1e1;
+  width: 250px;
+  background-color: #f7f7f7;
+  border-right: 1px solid #e8e8e8;
   display: flex;
   flex-direction: column;
   height: 100%;
 }
 
 .sidebar-header {
-  padding: 12px 16px;
-  border-bottom: 1px solid #eee;
+  padding: 16px;
+  border-bottom: 1px solid #e8e8e8;
   display: flex;
-  align-items: center;
   justify-content: space-between;
+  align-items: center;
   background-color: #fff;
 }
 
 .sidebar-header h3 {
   margin: 0;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 600;
-  color: #555;
+  color: #333;
 }
 
 .add-btn {
-  background: none;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  cursor: pointer;
   width: 24px;
   height: 24px;
+  border-radius: 4px;
+  border: 1px solid #d9d9d9;
+  background: #fff;
+  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
+  font-size: 18px;
   color: #666;
+  transition: all 0.2s;
+  padding: 0;
+  line-height: 1;
 }
 
 .add-btn:hover {
-  background-color: #f0f0f0;
-  color: #2b579a;
-  border-color: #2b579a;
+  color: #1890ff;
+  border-color: #1890ff;
+  background-color: #e6f7ff;
 }
 
 .chapter-list {
   list-style: none;
-  margin: 0;
   padding: 0;
-  flex: 1;
+  margin: 0;
   overflow-y: auto;
+  flex: 1;
 }
 
 .chapter-item {
-  position: relative; /* 确保层级正确 */
-  z-index: 1;
   padding: 10px 16px;
   cursor: pointer;
-  border-bottom: 1px solid #f5f5f5;
-  font-size: 13px;
-  color: #333;
+  border-bottom: 1px solid #f0f0f0;
+  transition: all 0.2s;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  transition: background-color 0.2s;
-  height: 40px; /* 固定高度防止重命名时跳动 */
-  box-sizing: border-box;
+  font-size: 14px;
+  color: #333;
+  position: relative;
 }
 
 .chapter-item:hover {
-  background-color: #f0f0f0;
+  background-color: #e6f7ff;
 }
 
 .chapter-item.active {
-  background-color: #e6f0ff;
-  border-left: 3px solid #2b579a;
-  color: #2b579a;
+  background-color: #e6f7ff;
+  color: #1890ff;
+  border-right: 2px solid #1890ff;
   font-weight: 500;
 }
 
-.chapter-title {
-  flex: 1;
+.chapter-item span {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  margin-right: 8px;
-  user-select: none;
-  pointer-events: auto; /* 确保可点击 */
-  cursor: text; /* 提示可编辑 */
-}
-
-.rename-input {
   flex: 1;
-  width: 100%;
-  padding: 4px;
-  border: 1px solid #2b579a; 
-  background: white;
-  border-radius: 2px;
-  font-size: 13px;
   margin-right: 8px;
-  z-index: 100; /* 确保在最上层 */
 }
 
 .delete-btn {
   opacity: 0;
-  border: none;
   background: none;
-  color: #999;
+  border: none;
+  color: #ff4d4f;
   cursor: pointer;
   font-size: 16px;
   padding: 0 4px;
+  transition: all 0.2s;
+  border-radius: 4px;
 }
 
 .chapter-item:hover .delete-btn {
@@ -115,5 +103,14 @@
 }
 
 .delete-btn:hover {
-  color: #cc0000;
+  background-color: #fff1f0;
+}
+
+.rename-input {
+  width: 100%;
+  padding: 4px 8px;
+  border: 1px solid #1890ff;
+  border-radius: 4px;
+  outline: none;
+  font-size: 14px;
 }
