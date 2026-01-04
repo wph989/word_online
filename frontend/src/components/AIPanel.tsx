@@ -16,7 +16,7 @@ export interface AIPanelProps {
   selectedText?: string; // 实时选中文本
 }
 
-export default function AIPanel({ onAIEdit, onInsert, onReplace, saveSelection, selectedText: externalSelectedText }: AIPanelProps) {
+export default function AIPanel({ onAIEdit: _onAIEdit, onInsert, onReplace, saveSelection, selectedText: externalSelectedText }: AIPanelProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'edit' | 'generate'>('edit');
   const [inputText, setInputText] = useState('');
