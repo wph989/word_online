@@ -13,11 +13,14 @@ import { chapterService } from '../services/chapterService'
 interface ChapterMeta {
   id: string;
   title: string;
-  orderIndex: number;
+  order_index: number;
+  level: number;
+  parent_id?: string | null;
 }
 
 const DocumentEditor: React.FC = () => {
   const { docId } = useParams<{ docId: string }>();
+  // ... (hooks) ...
   const navigate = useNavigate();
   const editorRef = useRef<EditorRef>(null);
 
@@ -50,7 +53,9 @@ const DocumentEditor: React.FC = () => {
       const adaptedChapters = (doc.chapters || []).map((c: any) => ({
         id: c.id,
         title: c.title,
-        orderIndex: c.order_index || 0
+        order_index: c.order_index || 0,
+        level: c.level || 1,
+        parent_id: c.parent_id || null
       }));
       setChapterList(adaptedChapters);
 
@@ -67,6 +72,8 @@ const DocumentEditor: React.FC = () => {
       setLoading(false);
     }
   };
+
+  // ... (loadChapter function is fine) ...
 
   const loadChapter = async (id: string) => {
     if (!id) return;
@@ -87,19 +94,31 @@ const DocumentEditor: React.FC = () => {
     }
   };
 
-  const handleCreateChapter = async () => {
+  const handleCreateChapter = async (parentId?: string) => {
     if (!docId) return;
     try {
+      // 计算 level
+      let level = 1;
+      if (parentId) {
+        const parent = chapterList.find(c => c.id === parentId);
+        if (parent) {
+          level = parent.level + 1;
+        }
+      }
+
+      // 计算 order_index (简单起见，放在同级最后)
+      // 注意：这里需要准确过滤同级章节。如果仅仅是追加，重新加载列表最安全。
+      const siblings = chapterList.filter(c => c.parent_id === (parentId || null));
+      const orderIndex = siblings.length;
+
       const newChapter = await chapterService.createChapter(
         `新章节 ${chapterList.length + 1}`,
-        docId
+        docId,
+        { parent_id: parentId, level, order_index: orderIndex }
       );
-      const newMeta = {
-        id: newChapter.id,
-        title: newChapter.title,
-        orderIndex: newChapter.order_index || 0
-      };
-      setChapterList(prev => [...prev, newMeta]);
+
+      // 重新加载整个文档结构以确保排序正确（后端会处理排序）
+      await loadDocument(docId);
 
       // 自动选中新章节
       setChapter(newChapter);
@@ -117,17 +136,21 @@ const DocumentEditor: React.FC = () => {
     confirm.confirmDelete(chapterToDelete.title, async () => {
       try {
         await chapterService.deleteChapter(id);
-        const newList = chapterList.filter(c => c.id !== id);
-        setChapterList(newList);
 
-        if (chapter && chapter.id === id) {
-          if (newList.length > 0) {
-            loadChapter(newList[0].id);
-          } else {
-            setChapter(null);
-            setCurrentHtml('');
-          }
+        // 删除章节后重新加载文档结构，确保所有子章节也被移除
+        if (docId) {
+          await loadDocument(docId);
         }
+
+        // 如果当前选中的是被删除的章节（或其子章节），则选中第一个可用章节
+        if (chapter && (chapter.id === id || chapterList.find(c => c.id === id)?.id === chapter.parent_id)) {
+          // 由于 state 更新是异步的，这里暂时无法获取最新的 list。
+          // loadDocument 会设置新的 list。
+          // 我们可以简单地清空当前章节，loadDocument 的逻辑会处理选中第一个。
+          setChapter(null);
+          setCurrentHtml('');
+        }
+
         toast.success('章节已删除');
       } catch (e) {
         toast.error('删除失败');
@@ -149,6 +172,16 @@ const DocumentEditor: React.FC = () => {
       toast.success('重命名成功');
     } catch (e) {
       toast.error('重命名失败');
+    }
+  };
+
+  const handleMoveChapter = async (draggedId: string, newParentId: string | null, newIndex: number) => {
+    try {
+      await chapterService.moveChapter(draggedId, newParentId, newIndex);
+      // 移动后重新加载文档结构
+      if (docId) await loadDocument(docId);
+    } catch (e: any) {
+      toast.error('移动章节失败: ' + (e.response?.data?.detail || e.message));
     }
   };
 
@@ -295,6 +328,7 @@ const DocumentEditor: React.FC = () => {
           onCreate={handleCreateChapter}
           onDelete={handleDeleteChapter}
           onRename={handleRenameChapter}
+          onMove={handleMoveChapter}
         />
 
         <main>

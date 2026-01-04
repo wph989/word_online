@@ -16,9 +16,12 @@ export interface Chapter {
   html_content: string; // 后端返回 HTML
   content: Content;
   stylesheet: StyleSheet;
-  orderIndex: number; // 注意：后端可能是 order_index，这里前端可能用了驼峰
+  order_index: number;
+  level: number;
+  parent_id?: string | null;
   created_at?: string;
   updated_at?: string;
+  children?: Chapter[]; // 用于前端递归渲染
 }
 
 export interface Document {

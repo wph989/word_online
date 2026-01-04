@@ -73,9 +73,15 @@ def get_document(
         raise HTTPException(status_code=404, detail="文档不存在")
     
     # 获取排序后的章节
-    chapters = db.query(Chapter).filter(
+    # 获取排序后的章节
+    # 使用 chapters 模块中的 build_chapter_tree 进行树形排序
+    from app.api.v1.chapters import build_chapter_tree
+    
+    raw_chapters = db.query(Chapter).filter(
         Chapter.doc_id == doc_id
-    ).order_by(Chapter.order_index.asc()).all()
+    ).all()
+    
+    sorted_chapters = build_chapter_tree(raw_chapters)
     
     return DocumentWithChapters(
         id=doc.id,
@@ -88,10 +94,12 @@ def get_document(
                 doc_id=c.doc_id,
                 title=c.title,
                 order_index=c.order_index,
+                level=c.level,
+                parent_id=c.parent_id,
                 created_at=c.created_at,
                 updated_at=c.updated_at
             )
-            for c in chapters
+            for c in sorted_chapters
         ]
     )
 
@@ -185,11 +193,17 @@ def list_documents(
     docs = db.query(Document).offset(offset).limit(limit).all()
     
     # 为每个文档查询章节
+    # 为每个文档查询章节
+    # 延迟导入以避免循环依赖
+    from app.api.v1.chapters import build_chapter_tree
+
     items = []
     for doc in docs:
-        chapters = db.query(Chapter).filter(
+        raw_chapters = db.query(Chapter).filter(
             Chapter.doc_id == doc.id
-        ).order_by(Chapter.order_index.asc()).all()
+        ).all()
+        
+        sorted_chapters = build_chapter_tree(raw_chapters)
         
         items.append(DocumentWithChapters(
             id=doc.id,
@@ -202,10 +216,12 @@ def list_documents(
                     doc_id=c.doc_id,
                     title=c.title,
                     order_index=c.order_index,
+                    level=c.level,
+                    parent_id=c.parent_id,
                     created_at=c.created_at,
                     updated_at=c.updated_at
                 )
-                for c in chapters
+                for c in sorted_chapters
             ]
         ))
     

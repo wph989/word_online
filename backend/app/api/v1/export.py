@@ -38,7 +38,7 @@ def export_chapter_to_docx(
     include_title: bool = Query(True, description="是否在文档开头包含章节标题")
 ):
     """
-    导出章节为 Word 文档
+    导出章节为 Word 文档（自动包含所有子章节）
     
     Args:
         chapter_id: 章节 ID
@@ -60,31 +60,57 @@ def export_chapter_to_docx(
         
         logger.info(f"开始导出章节: {chapter.title} (ID: {chapter_id})")
         
-        # 准备内容
-        content = chapter.content.copy() if isinstance(chapter.content, dict) else {}
-        stylesheet = chapter.stylesheet.copy() if isinstance(chapter.stylesheet, dict) else {}
+        # 递归收集该章节及其所有子章节
+        def collect_chapter_tree(parent_chapter):
+            """递归收集章节及其子章节"""
+            chapters = [parent_chapter]
+            
+            # 查询子章节（按 order_index 排序）
+            children = db.query(Chapter).filter(
+                Chapter.parent_id == parent_chapter.id
+            ).order_by(Chapter.order_index.asc()).all()
+            
+            # 递归收集每个子章节
+            for child in children:
+                chapters.extend(collect_chapter_tree(child))
+            
+            return chapters
         
-        # 调试日志
-        logger.info(f"Content 类型: {type(chapter.content)}, 内容: {str(chapter.content)[:200]}")
-        logger.info(f"StyleSheet 类型: {type(chapter.stylesheet)}, 内容: {str(chapter.stylesheet)[:200]}")
-        logger.info(f"Content blocks 数量: {len(content.get('blocks', []))}")
+        # 收集所有章节（父章节 + 所有子孙章节）
+        all_chapters = collect_chapter_tree(chapter)
+        logger.info(f"收集到 {len(all_chapters)} 个章节（包含子章节）")
         
-        # 检查 content 是否为空
-        if not content or not content.get("blocks"):
-            logger.warning(f"章节 {chapter_id} 的 content 为空或没有 blocks")
-            # 尝试使用默认结构
-            content = {"blocks": []}
+        # 合并所有章节的内容
+        merged_content = {"blocks": []}
+        merged_stylesheet = {
+            "styleId": f"chapter-export-{chapter_id}",
+            "appliesTo": "document",
+            "rules": []
+        }
         
-        # 如果需要包含标题,在内容开头添加
-        if include_title and content.get("blocks") is not None:
-            title_block = {
-                "id": f"export-title-{chapter_id}",
-                "type": "heading",
-                "level": 1,
-                "text": chapter.title,
-                "marks": []
-            }
-            content["blocks"].insert(0, title_block)
+        for idx, ch in enumerate(all_chapters):
+            # 添加章节标题（根据层级调整标题级别）
+            if include_title or idx > 0:  # 第一个章节根据参数决定，子章节总是包含标题
+                # 计算标题级别：父章节用 level，子章节用 level+1（但不超过6）
+                title_level = min(ch.level, 6)
+                
+                merged_content["blocks"].append({
+                    "id": f"chapter-title-{ch.id}",
+                    "type": "heading",
+                    "level": title_level,
+                    "text": ch.title,
+                    "marks": []
+                })
+            
+            # 合并章节内容
+            chapter_blocks = ch.content.get("blocks", []) if isinstance(ch.content, dict) else []
+            merged_content["blocks"].extend(chapter_blocks)
+            
+            # 合并样式规则
+            chapter_rules = ch.stylesheet.get("rules", []) if isinstance(ch.stylesheet, dict) else []
+            merged_stylesheet["rules"].extend(chapter_rules)
+        
+        logger.info(f"合并后总 Blocks 数量: {len(merged_content['blocks'])}")
         
         # 查询文档配置
         doc_settings = db.query(DocumentSettings).filter(
@@ -102,7 +128,7 @@ def export_chapter_to_docx(
             }
         
         # 创建导出器（传入文档配置）
-        exporter = DocxExporter(content, stylesheet, settings_dict)
+        exporter = DocxExporter(merged_content, merged_stylesheet, settings_dict)
         file_stream = exporter.export()
         
         # 生成文件名(移除非法字符)
@@ -110,7 +136,7 @@ def export_chapter_to_docx(
         if not safe_filename:
             safe_filename = f"chapter_{chapter_id[:8]}"
         
-        logger.info(f"章节导出成功: {safe_filename}.docx")
+        logger.info(f"章节导出成功: {safe_filename}.docx (包含 {len(all_chapters)} 个章节)")
         
         # 返回文件 (使用 URL 编码支持中文文件名)
         encoded_filename = quote(f"{chapter.title}.docx")

@@ -41,7 +41,9 @@ class ChapterCreate(BaseModel):
     doc_id: str = Field(..., description="所属文档ID")
     title: str = Field(..., min_length=1, max_length=255, description="章节标题")
     html_content: str = Field(..., description="HTML内容（从编辑器获取）")
-    order_index: int = Field(default=0, description="排序索引")
+    parent_id: Optional[str] = Field(None, description="父章节ID（NULL表示顶级章节）")
+    level: int = Field(default=1, ge=1, description="章节层级(1=一级章节,2=二级章节,等)")
+    order_index: int = Field(default=0, description="同级章节中的排序索引（同一父级下从0开始）")
 
 
 class ChapterUpdate(BaseModel):
@@ -51,7 +53,17 @@ class ChapterUpdate(BaseModel):
     """
     title: Optional[str] = Field(None, min_length=1, max_length=255, description="章节标题")
     html_content: Optional[str] = Field(None, description="HTML内容")
-    order_index: Optional[int] = Field(None, description="排序索引")
+    parent_id: Optional[str] = Field(None, description="父章节ID（NULL表示顶级章节）")
+    level: Optional[int] = Field(None, ge=1, description="章节层级(1=一级章节,2=二级章节,等)")
+    order_index: Optional[int] = Field(None, description="同级章节中的排序索引（同一父级下从0开始）")
+
+
+class ChapterMoveRequest(BaseModel):
+    """
+    移动/重排序章节的请求模型
+    """
+    new_parent_id: Optional[str] = Field(None, description="新的父章节ID（None表示顶级，字符串'null'也可表示顶级）")
+    new_index: int = Field(..., ge=0, description="新的同级排序索引")
 
 
 class ChapterBase(BaseModel):
@@ -59,7 +71,9 @@ class ChapterBase(BaseModel):
     id: str = Field(..., description="章节ID")
     doc_id: str = Field(..., description="所属文档ID")
     title: str = Field(..., description="章节标题")
-    order_index: int = Field(..., description="排序索引")
+    parent_id: Optional[str] = Field(None, description="父章节ID（NULL表示顶级章节）")
+    level: int = Field(..., description="章节层级(1=一级章节,2=二级章节,等)")
+    order_index: int = Field(..., description="同级章节中的排序索引（同一父级下从0开始）")
     created_at: datetime = Field(..., description="创建时间")
     updated_at: datetime = Field(..., description="更新时间")
     

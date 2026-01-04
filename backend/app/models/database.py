@@ -41,7 +41,7 @@ class Document(Base):
         "Chapter", 
         back_populates="document",
         cascade="all, delete-orphan",
-        order_by="Chapter.order_index"
+        order_by="[Chapter.level, Chapter.order_index]"
     )
     
     # 关联关系：文档配置 (一对一)
@@ -73,9 +73,19 @@ class Chapter(Base):
         comment="所属文档ID"
     )
     
+    # 外键：关联到父章节（支持层级结构）
+    parent_id = Column(
+        String(36),
+        ForeignKey("chapters.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+        comment="父章节ID（NULL表示顶级章节）"
+    )
+    
     # 基本信息
     title = Column(String(255), nullable=False, comment="章节标题")
-    order_index = Column(Integer, default=0, comment="章节排序索引")
+    level = Column(Integer, default=1, nullable=False, comment="章节层级(1=一级章节,2=二级章节,等)")
+    order_index = Column(Integer, default=0, comment="同级章节中的排序索引（同一父级下从0开始）")
     
     # 核心数据：存储原始 HTML（从前端接收）
     html_content = Column(Text, nullable=True, comment="原始HTML内容")
@@ -95,6 +105,15 @@ class Chapter(Base):
     
     # 关联关系：章节属于一个文档
     document = relationship("Document", back_populates="chapters")
+    
+    # 关联关系：父子章节（自引用）
+    children = relationship(
+        "Chapter",
+        back_populates="parent",
+        cascade="all, delete-orphan",
+        order_by="[Chapter.order_index]"
+    )
+    parent = relationship("Chapter", back_populates="children", remote_side="Chapter.id")
 
 
 class DocumentSettings(Base):

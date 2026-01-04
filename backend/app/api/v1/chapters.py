@@ -21,6 +21,7 @@ from app.models.schemas import (
     ChapterBase,
     ChapterDetail,
     ChapterHtmlResponse,
+    ChapterMoveRequest,
     MessageResponse
 )
 from app.models.content_models import Content, StyleSheet
@@ -29,6 +30,37 @@ from app.services.wangeditor_renderer import WangEditorRenderer  # 使用 WangEd
 
 
 router = APIRouter(prefix="/api/v1/chapters", tags=["chapters"])
+
+
+def build_chapter_tree(chapters: List[Chapter], parent_id: str = None) -> List[Chapter]:
+    """
+    递归构建章节树，按层级和顺序排序
+    
+    Args:
+        chapters: 所有章节列表
+        parent_id: 父章节ID（None表示顶级章节）
+        
+    Returns:
+        排序后的章节列表（深度优先遍历）
+    """
+    result = []
+    
+    # 找出当前层级的章节并按 order_index 排序
+    current_level = [
+        ch for ch in chapters 
+        if ch.parent_id == parent_id
+    ]
+    current_level.sort(key=lambda x: x.order_index)
+    
+    # 递归添加每个章节及其子章节
+    for chapter in current_level:
+        result.append(chapter)
+        # 递归添加子章节
+        children = build_chapter_tree(chapters, chapter.id)
+        result.extend(children)
+    
+    return result
+
 
 
 @router.post("", response_model=ChapterBase, status_code=201)
@@ -63,6 +95,8 @@ def create_chapter(
         html_content=chapter_in.html_content,  # 保存原始 HTML(备份用)
         content=content.model_dump(),  # 结构化数据(用于 AI 处理)
         stylesheet=stylesheet.model_dump(),  # 样式数据(独立存储)
+        parent_id=chapter_in.parent_id,  # 父章节ID
+        level=chapter_in.level,  # 章节层级
         order_index=chapter_in.order_index
     )
     
@@ -127,6 +161,8 @@ def get_chapter(
         id=chapter.id,
         doc_id=chapter.doc_id,
         title=chapter.title,
+        level=chapter.level,
+        parent_id=chapter.parent_id,
         order_index=chapter.order_index,
         created_at=chapter.created_at,
         updated_at=chapter.updated_at,
@@ -209,6 +245,12 @@ def update_chapter(
     if chapter_in.title is not None:
         chapter.title = chapter_in.title
     
+    if chapter_in.parent_id is not None:
+        chapter.parent_id = chapter_in.parent_id
+    
+    if chapter_in.level is not None:
+        chapter.level = chapter_in.level
+    
     if chapter_in.order_index is not None:
         chapter.order_index = chapter_in.order_index
     
@@ -236,14 +278,121 @@ def delete_chapter(
     chapter = db.query(Chapter).filter(Chapter.id == chapter_id).first()
     if not chapter:
         raise HTTPException(status_code=404, detail="章节不存在")
-    
     db.delete(chapter)
     db.commit()
     
     return MessageResponse(
-        message=f"章节 '{chapter.title}' 已删除",
+        message=f"章节 '{chapter.title}' 及其子章节已删除",
         success=True
     )
+
+
+@router.post("/{chapter_id}/move", response_model=ChapterBase)
+def move_chapter(
+    chapter_id: str,
+    move_req: ChapterMoveRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    移动/重排序章节
+    """
+    # 1. 获取目标章节
+    chapter = db.query(Chapter).filter(Chapter.id == chapter_id).first()
+    if not chapter:
+        raise HTTPException(status_code=404, detail="章节不存在")
+
+    # 2. 验证新的父章节
+    new_parent_id = move_req.new_parent_id
+    new_level = 1
+    
+    if new_parent_id:
+        if new_parent_id == chapter_id:
+            raise HTTPException(status_code=400, detail="不能将章节移动到自己下面")
+            
+        new_parent = db.query(Chapter).filter(Chapter.id == new_parent_id).first()
+        if not new_parent:
+            raise HTTPException(status_code=404, detail="目标父章节不存在")
+        
+        # 检查是否移动到了自己的子孙章节下
+        # 简单的循环检查（更严谨应该递归或使用 CTE，但此处假设层级不深）
+        ancestor = new_parent
+        while ancestor.parent_id:
+            if ancestor.parent_id == chapter_id:
+                raise HTTPException(status_code=400, detail="不能将章节移动到自己的子章节下")
+            ancestor = db.query(Chapter).filter(Chapter.id == ancestor.parent_id).first()
+            if not ancestor:
+                break
+                
+        new_level = new_parent.level + 1
+
+    # 3. 准备数据
+    old_parent_id = chapter.parent_id
+    old_index = chapter.order_index
+    new_index = move_req.new_index
+    
+    # 4. 执行移动
+    if old_parent_id == new_parent_id:
+        # 情况 A: 同级重排序
+        if new_index == old_index:
+            return chapter # 无变化
+            
+        if new_index < old_index:
+            # 向上移动：中间的兄弟向下挤 (+1)
+            # 范围：[new_index, old_index - 1]
+            db.query(Chapter).filter(
+                Chapter.doc_id == chapter.doc_id,
+                Chapter.parent_id == old_parent_id,
+                Chapter.order_index >= new_index,
+                Chapter.order_index < old_index
+            ).update({Chapter.order_index: Chapter.order_index + 1}, synchronize_session=False)
+        else:
+            # 向下移动：中间的兄弟向上挤 (-1)
+            # 范围：[old_index + 1, new_index]
+            db.query(Chapter).filter(
+                Chapter.doc_id == chapter.doc_id,
+                Chapter.parent_id == old_parent_id,
+                Chapter.order_index > old_index,
+                Chapter.order_index <= new_index
+            ).update({Chapter.order_index: Chapter.order_index - 1}, synchronize_session=False)
+            
+        chapter.order_index = new_index
+        
+    else:
+        # 情况 B: 跨父级移动
+        
+        # B1. 从旧父级移除：旧兄弟填补空缺 (index > old_index 的都 -1)
+        db.query(Chapter).filter(
+            Chapter.doc_id == chapter.doc_id,
+            Chapter.parent_id == old_parent_id,
+            Chapter.order_index > old_index
+        ).update({Chapter.order_index: Chapter.order_index - 1}, synchronize_session=False)
+        
+        # B2. 插入新父级：新兄弟腾出位置 (index >= new_index 的都 +1)
+        db.query(Chapter).filter(
+            Chapter.doc_id == chapter.doc_id,
+            Chapter.parent_id == new_parent_id,
+            Chapter.order_index >= new_index
+        ).update({Chapter.order_index: Chapter.order_index + 1}, synchronize_session=False)
+        
+        # B3. 更新自身
+        level_diff = new_level - chapter.level
+        chapter.parent_id = new_parent_id
+        chapter.order_index = new_index
+        chapter.level = new_level
+        
+        # B4. 递归更新所有子孙章节的 level
+        if level_diff != 0:
+            def update_children_level(parent_id, diff):
+                children = db.query(Chapter).filter(Chapter.parent_id == parent_id).all()
+                for child in children:
+                    child.level += diff
+                    update_children_level(child.id, diff)
+            
+            update_children_level(chapter.id, level_diff)
+
+    db.commit()
+    db.refresh(chapter)
+    return chapter
 
 
 @router.get("", response_model=List[ChapterBase])
@@ -252,14 +401,19 @@ def list_chapters(
     db: Session = Depends(get_db)
 ):
     """
-    获取章节列表
+    获取章节列表（按层级结构排序）
+    
+    返回的章节列表按照父子关系和 order_index 排序：
+    - 先显示顶级章节（parent_id=NULL）
+    - 每个章节后面紧跟其子章节
+    - 同级章节按 order_index 排序
     
     Args:
         doc_id: 文档 ID(可选,用于筛选)
         db: 数据库会话
         
     Returns:
-        章节列表
+        章节列表（层级结构展开后的列表）
     """
     query = db.query(Chapter)
     
@@ -267,7 +421,10 @@ def list_chapters(
     if doc_id:
         query = query.filter(Chapter.doc_id == doc_id)
     
-    # 按排序索引排序
-    chapters = query.order_by(Chapter.order_index.asc()).all()
+    # 获取所有章节
+    all_chapters = query.all()
+    
+    # 使用递归函数构建层级树并展开为列表
+    chapters = build_chapter_tree(all_chapters)
     
     return chapters

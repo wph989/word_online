@@ -604,26 +604,48 @@ class DocxExporter:
         # 行高
         line_height = styles.get("lineHeight")
         if line_height:
-            para.paragraph_format.line_spacing_rule = WD_LINE_SPACING.MULTIPLE
-            para.paragraph_format.line_spacing = line_height
+            # 尝试解析为倍数
+            try:
+                # 如果是纯数字字符串或数字，视为倍数行距
+                if isinstance(line_height, (int, float)) or (isinstance(line_height, str) and line_height.replace('.', '', 1).isdigit()):
+                   lh_val = float(line_height)
+                   para.paragraph_format.line_spacing_rule = WD_LINE_SPACING.MULTIPLE
+                   para.paragraph_format.line_spacing = lh_val
+                else:
+                   # 尝试解析为长度（如 20px） -> 固定值
+                   lh_pt = self._parse_length(line_height)
+                   if lh_pt is not None:
+                       para.paragraph_format.line_spacing_rule = WD_LINE_SPACING.EXACTLY
+                       para.paragraph_format.line_spacing = Pt(lh_pt)
+            except Exception as e:
+                logger.warning(f"应用行高失败: {line_height}, error: {e}")
         else:
             # 如果段落样式中没有设置行高，应用默认行高
-            para.paragraph_format.line_spacing_rule = WD_LINE_SPACING.MULTIPLE
-            para.paragraph_format.line_spacing = get_default_line_height()
+            try:
+                para.paragraph_format.line_spacing_rule = WD_LINE_SPACING.MULTIPLE
+                para.paragraph_format.line_spacing = get_default_line_height()
+            except:
+                pass
         
         # 缩进
         text_indent = styles.get("textIndent")
         if text_indent:
-            para.paragraph_format.first_line_indent = Pt(text_indent)
+            indent_pt = self._parse_length(text_indent)
+            if indent_pt is not None:
+                para.paragraph_format.first_line_indent = Pt(indent_pt)
         
         # 段落间距
         margin_top = styles.get("marginTop")
         if margin_top:
-            para.paragraph_format.space_before = Pt(margin_top)
+            top_pt = self._parse_length(margin_top)
+            if top_pt is not None:
+                para.paragraph_format.space_before = Pt(top_pt)
         
         margin_bottom = styles.get("marginBottom")
         if margin_bottom:
-            para.paragraph_format.space_after = Pt(margin_bottom)
+            bottom_pt = self._parse_length(margin_bottom)
+            if bottom_pt is not None:
+                para.paragraph_format.space_after = Pt(bottom_pt)
         
         # 注意：字号和字体不在段落级别处理，只在字符级别（marks）处理
         # 这样可以避免段落样式覆盖字符级样式
@@ -792,4 +814,48 @@ class DocxExporter:
             return val * 0.75
         
         # 默认或明确为 pt -> 直接返回
+        return val
+
+    def _parse_length(self, length_val: Union[str, int, float]) -> Optional[float]:
+        """
+        解析长度值为 Pt 数值 (float)
+        支持的单位: px, pt, cm, mm, in, em, rem
+        """
+        if length_val is None:
+            return None
+            
+        # 如果是数字，默认为 pt (因为 docx 库主要使用 Pt)
+        if isinstance(length_val, (int, float)):
+            return float(length_val)
+            
+        s = str(length_val).lower().strip()
+        if not s or s == "auto":
+            return None
+            
+        # 提取数值
+        match = re.search(r'(-?\d+(\.\d+)?)', s)
+        if not match:
+            return None
+            
+        val = float(match.group(1))
+        
+        # 单位转换
+        if 'px' in s:
+            return val * 0.75
+        elif 'cm' in s:
+            return val * 28.3465
+        elif 'mm' in s:
+            return val * 2.83465
+        elif 'in' in s:
+            return val * 72.0
+        elif 'em' in s or 'rem' in s:
+            # 1em 约等于 1个字号，默认按 12pt (小四/五号之间) 计算
+            # 对于中文首行缩进 2em，通常期望是 2个汉字宽度
+            # Word 中通常用 Character Units，但 python-docx 只支持 Pt/Emu
+            return val * 12.0  # 粗略估算
+        elif '%' in s:
+            # 百分比无法直接转换为固定长度，忽略或返回 None
+            return None
+            
+        # 默认视为 pt
         return val

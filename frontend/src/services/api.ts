@@ -124,12 +124,14 @@ export const chapterService = {
   },
 
   // 章节相关
-  createChapter: async (title: string, docId: string) => {
+  createChapter: async (title: string, docId: string, options?: { parent_id?: string, level?: number, order_index?: number }) => {
     const response = await api.post(`/api/v1/chapters`, {
       doc_id: docId,
       title: title,
       html_content: '<p>新章节内容...</p>', // 默认内容
-      order_index: 0 // 后端可能会自动处理，但发一个比较安全
+      parent_id: options?.parent_id || null,
+      level: options?.level || 1,
+      order_index: options?.order_index ?? 0 // 默认为0
     });
     return response.data;
   },
@@ -147,6 +149,14 @@ export const chapterService = {
 
   deleteChapter: async (id: string) => {
     const response = await api.delete(`/api/v1/chapters/${id}`);
+    return response.data;
+  },
+
+  moveChapter: async (id: string, newParentId: string | null, newIndex: number) => {
+    const response = await api.post(`/api/v1/chapters/${id}/move`, {
+      new_parent_id: newParentId,
+      new_index: newIndex
+    });
     return response.data;
   },
 
