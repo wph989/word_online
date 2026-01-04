@@ -62,11 +62,29 @@ new_pro/
 ├── frontend/                  # 前端（简化版）
 │   ├── public/
 │   ├── src/
-│   │   ├── components/
-│   │   │   └── Editor.tsx          # 编辑器组件
-│   │   ├── services/
-│   │   │   └── api.ts              # API 调用
-│   │   └── App.tsx
+│   │   ├── components/        # UI 组件
+│   │   │   ├── AIPanel.tsx          # AI 辅助面板
+│   │   │   ├── ConfirmDialog.tsx    # 确认对话框
+│   │   │   ├── Editor.tsx           # 富文本编辑器组件
+│   │   │   ├── ErrorBoundary.tsx    # 错误边界组件
+│   │   │   ├── Loading.tsx          # 加载动画组件
+│   │   │   ├── Sidebar.tsx          # 侧边栏组件
+│   │   │   └── Toast.tsx            # 消息提示组件
+│   │   ├── config/            # 配置文件
+│   │   │   └── editorDefaults.ts    # 编辑器默认配置
+│   │   ├── constants/         # 常量定义
+│   │   │   └── aiActions.ts         # AI 操作常量
+│   │   ├── pages/             # 页面组件
+│   │   │   ├── DocumentEditor.tsx   # 文档编辑页面
+│   │   │   └── DocumentList.tsx     # 文档列表页面
+│   │   ├── services/          # 服务层
+│   │   │   ├── api.ts               # API 基础调用
+│   │   │   └── chapterService.ts    # 章节服务
+│   │   ├── types/             # 类型定义
+│   │   │   └── api.ts               # API 相关类型
+│   │   ├── App.tsx            # 应用根组件
+│   │   ├── main.tsx           # 应用入口
+│   │   └── vite-env.d.ts      # Vite 环境类型
 │   ├── package.json
 │   └── vite.config.ts
 ├── docs/                      # 文档
@@ -219,6 +237,3 @@ npm run dev
   - Python: snake_case
   - TypeScript: camelCase
 
-## 许可证
-
-MIT License
