@@ -9,9 +9,10 @@ from docx.shared import RGBColor
 from typing import Dict, Any, Optional
 
 from .style_utils import (
-    apply_page_margins, 
-    configure_heading_styles,
-    apply_paragraph_style
+    apply_paragraph_style,
+    apply_cell_style,
+    apply_page_margins,
+    configure_heading_styles
 )
 from .block_processors import (
     add_paragraph,
@@ -22,6 +23,7 @@ from .block_processors import (
     add_divider
 )
 from .heading_numbering import create_heading_number_generator
+from .auto_numbering import create_multilevel_numbering
 
 logger = logging.getLogger(__name__)
 
@@ -54,22 +56,34 @@ class DocxExporter:
         # 应用页边距配置
         apply_page_margins(self.doc, self.document_settings)
         
-        # 配置标题样式模板
-        configure_heading_styles(self.doc, self.document_settings)
+        # 初始化标题编号（支持两种模式）
+        numbering_config = self.document_settings.get('heading_numbering_style')
+        
+        # 检查是否使用自动编号
+        if numbering_config and numbering_config.get('useAutoNumbering', False):
+            # 模式1：Word自动编号
+            self.auto_numbering_id = create_multilevel_numbering(self.doc, numbering_config)
+            self.heading_number_generator = None
+            if self.auto_numbering_id:
+                style_name = numbering_config.get('style', 'style2')
+                logger.info(f"启用Word自动编号: 样式={style_name}, numId={self.auto_numbering_id}")
+        else:
+            # 模式2：文本前缀编号
+            self.auto_numbering_id = None
+            self.heading_number_generator = create_heading_number_generator(numbering_config)
+            if self.heading_number_generator:
+                style_name = numbering_config.get('style', 'custom') if numbering_config else 'none'
+                logger.info(f"启用文本前缀编号: 样式={style_name}")
+        
+        # 配置标题样式模板（如果使用自动编号，将编号应用到样式）
+        configure_heading_styles(self.doc, self.document_settings, self.auto_numbering_id)
         
         self.style_map = self._build_style_map()
         self.cell_style_map = self._build_cell_style_map()
         
-        # 初始化标题编号生成器
-        numbering_config = self.document_settings.get('heading_numbering_style')
-        self.heading_number_generator = create_heading_number_generator(numbering_config)
-        
         logger.info(f"初始化 DocxExporter, Blocks 数量: {len(content.get('blocks', []))}")
         if document_settings:
             logger.info(f"应用文档配置: 页边距={document_settings.get('margin_top', 2.54)}cm(上)")
-            if self.heading_number_generator:
-                style_name = numbering_config.get('style', 'custom') if numbering_config else 'none'
-                logger.info(f"启用标题编号: 样式={style_name}")
     
     def export(self) -> io.BytesIO:
         """
@@ -150,7 +164,7 @@ class DocxExporter:
         if block_type == "paragraph":
             add_paragraph(self.doc, block, self.style_map)
         elif block_type == "heading":
-            add_heading(self.doc, block, self.style_map, self.heading_number_generator)
+            add_heading(self.doc, block, self.style_map, self.heading_number_generator, self.auto_numbering_id)
         elif block_type == "table":
             add_table(self.doc, block, self.cell_style_map)
         elif block_type == "image":

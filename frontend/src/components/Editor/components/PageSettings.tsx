@@ -16,6 +16,7 @@ interface PageSettingsProps {
     headingNumberingStyle: {
         enabled: boolean;
         style?: string;
+        useAutoNumbering?: boolean;
     } | null;
     setPageMargins: (margins: any) => void;
     setHeadingStyles: (styles: any) => void;
@@ -100,7 +101,11 @@ export const PageSettings: React.FC<PageSettingsProps> = ({
                         if (value === 'none') {
                             setHeadingNumberingStyle(null);
                         } else {
-                            setHeadingNumberingStyle({ enabled: true, style: value });
+                            setHeadingNumberingStyle({
+                                enabled: true,
+                                style: value,
+                                useAutoNumbering: headingNumberingStyle?.useAutoNumbering || false
+                            });
                         }
                     }}
                     style={{
@@ -118,6 +123,42 @@ export const PageSettings: React.FC<PageSettingsProps> = ({
                     <option value="style4">章节格式（第一章 / 1.1 / 1.1.1）</option>
                 </select>
             </div>
+
+            {/* 编号类型选择（仅在启用编号时显示） */}
+            {headingNumberingStyle?.enabled && (
+                <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '20px',
+                    paddingLeft: '100px',
+                    paddingBottom: '10px',
+                    borderBottom: '1px solid #eee'
+                }}>
+                    <strong style={{ fontSize: '12px', color: '#666' }}>编号类型:</strong>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '13px', cursor: 'pointer' }}>
+                        <input
+                            type="radio"
+                            checked={!headingNumberingStyle.useAutoNumbering}
+                            onChange={() => setHeadingNumberingStyle({
+                                ...headingNumberingStyle,
+                                useAutoNumbering: false
+                            })}
+                        />
+                        <span>文本编号（固定，不可调整）</span>
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '13px', cursor: 'pointer' }}>
+                        <input
+                            type="radio"
+                            checked={headingNumberingStyle.useAutoNumbering === true}
+                            onChange={() => setHeadingNumberingStyle({
+                                ...headingNumberingStyle,
+                                useAutoNumbering: true
+                            })}
+                        />
+                        <span>自动编号（可在Word中调整）</span>
+                    </label>
+                </div>
+            )}
 
             {/* 标题样式区域 */}
             {[

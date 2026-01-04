@@ -6,7 +6,8 @@ import logging
 from docx.shared import Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
 from docx.oxml.ns import qn
-from typing import Dict, Any
+from docx.oxml import OxmlElement
+from typing import Dict, Any, Optional
 
 from .parsers import parse_color, parse_length, set_paragraph_shading, set_cell_background
 from app.config.editor_defaults import get_default_line_height
@@ -168,8 +169,15 @@ def apply_page_margins(doc, document_settings: Dict[str, Any]):
     logger.info(f"✅ 应用页边距: 上={margin_top}cm, 下={margin_bottom}cm, 左={margin_left}cm, 右={margin_right}cm")
 
 
-def configure_heading_styles(doc, document_settings: Dict[str, Any]):
-    """配置 Word 的标题样式模板"""
+def configure_heading_styles(doc, document_settings: Dict[str, Any], auto_numbering_id: Optional[int] = None):
+    """
+    配置 Word 的标题样式模板
+    
+    Args:
+        doc: Word文档对象
+        document_settings: 文档设置
+        auto_numbering_id: 自动编号ID（可选），如果提供则将编号应用到样式
+    """
     if not document_settings or 'heading_styles' not in document_settings:
         return
     
@@ -217,7 +225,35 @@ def configure_heading_styles(doc, document_settings: Dict[str, Any]):
             if config.get('marginBottom'):
                 style.paragraph_format.space_after = Pt(config['marginBottom'])
             
-            logger.info(f"✅ 配置标题样式: {style_name} - 字体={config.get('fontFamily')}, 字号={config.get('fontSize')}pt")
+            # 如果提供了自动编号ID，将编号应用到样式
+            if auto_numbering_id:
+                try:
+                    pPr = style.element.get_or_add_pPr()
+                    
+                    # 移除已有的编号
+                    for numPr in pPr.findall(qn('w:numPr')):
+                        pPr.remove(numPr)
+                    
+                    # 添加新的编号
+                    numPr = OxmlElement('w:numPr')
+                    
+                    # 级别索引 (0-based)
+                    ilvl = OxmlElement('w:ilvl')
+                    ilvl.set(qn('w:val'), str(level - 1))
+                    numPr.append(ilvl)
+                    
+                    # 编号ID
+                    numId = OxmlElement('w:numId')
+                    numId.set(qn('w:val'), str(auto_numbering_id))
+                    numPr.append(numId)
+                    
+                    pPr.append(numPr)
+                    
+                    logger.info(f"✅ 配置标题样式: {style_name} - 字体={config.get('fontFamily')}, 字号={config.get('fontSize')}pt, 编号=numId:{auto_numbering_id}")
+                except Exception as e:
+                    logger.error(f"为样式 {style_name} 添加编号失败: {e}")
+            else:
+                logger.info(f"✅ 配置标题样式: {style_name} - 字体={config.get('fontFamily')}, 字号={config.get('fontSize')}pt")
             
         except Exception as e:
             logger.error(f"配置标题样式 {style_name} 失败: {e}", exc_info=True)
