@@ -1,5 +1,13 @@
-import { Content } from './content';
-import { StyleSheet } from './stylesheet';
+// 简化版的 Content 和 StyleSheet 定义
+export interface Content {
+  blocks: any[];
+}
+
+export interface StyleSheet {
+  id?: string;
+  styles?: any[];
+  rules?: any[];
+}
 
 export interface Chapter {
   id: string;

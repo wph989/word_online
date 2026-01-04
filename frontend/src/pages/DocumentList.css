@@ -102,3 +102,27 @@
   background-color: #e0e0e0;
 }
 
+.doc-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  width: 100%;
+}
+
+.doc-actions .doc-action-btn {
+  flex: 1;
+  margin-top: 0;
+}
+
+.doc-delete-btn {
+  background-color: #fff2f0;
+  border-color: #ffccc7;
+  color: #ff4d4f;
+}
+
+.doc-delete-btn:hover {
+  background-color: #ffe7e6;
+  border-color: #ffa39e;
+}
+
+

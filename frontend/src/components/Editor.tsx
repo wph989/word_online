@@ -1,10 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import { Editor, Toolbar } from '@wangeditor/editor-for-react';
 import { Boot, ISelectMenu, IDomEditor, IEditorConfig, IToolbarConfig, DomEditor } from '@wangeditor/editor';
 import '@wangeditor/editor/dist/css/style.css';
 import { EDITOR_DEFAULTS, WORD_FONT_SIZES, FONT_FAMILY_OPTIONS } from '../config/editorDefaults';
 import { settingsService } from '../services/api';
-
 
 
 /**
@@ -22,12 +21,10 @@ function getActiveStyle(editor: IDomEditor, styleKey: 'fontSize' | 'fontFamily' 
     }
 
     // 2. 如果没有 Mark，检查是否是标题 Block，并获取其默认配置
-    // WangEditor 的标题 type 为 'header1' ~ 'header5'
     for (let i = 1; i <= 6; i++) {
         const type = `header${i}`;
         const node = DomEditor.getSelectedNodeByType(editor, type);
         if (node) {
-            // 找到标题节点，查找对应的配置
             // @ts-ignore
             const headingStyles = editor.headingStyles;
             if (headingStyles) {
@@ -39,23 +36,21 @@ function getActiveStyle(editor: IDomEditor, styleKey: 'fontSize' | 'fontFamily' 
                     } else if (styleKey === 'fontFamily') {
                         return styleConfig.fontFamily;
                     } else if (styleKey === 'lineHeight') {
-                        return '1.5'; // 标题默认行高
+                        return '1.5';
                     }
                 }
             }
-            break; // 找到即止
+            break;
         }
     }
     
-    // 2.5 如果是行高，还需要检查普通段落的行高设置 (WangEditor 将其存储在节点属性中)
+    // 2.5 如果是行高
     if (styleKey === 'lineHeight') {
         const node = DomEditor.getSelectedNodeByType(editor, 'paragraph');
         if (node) {
             // @ts-ignore
             if (node.lineHeight) return node.lineHeight;
         }
-        // check headers too if not handled above properly (though steps above handle config)
-        // headers with manual line height?
         for (let i = 1; i <= 6; i++) {
             const node = DomEditor.getSelectedNodeByType(editor, `header${i}`);
             // @ts-ignore
@@ -63,31 +58,22 @@ function getActiveStyle(editor: IDomEditor, styleKey: 'fontSize' | 'fontFamily' 
         }
     }
 
-    // 3. 尝试获取 DOM 计算样式 (所见即所得)
-    // 这能确保即使在普通段落或继承样式的情况下，也能显示真实的字体/字号
+    // 3. 尝试获取 DOM 计算样式
     try {
         const selection = window.getSelection();
         if (selection && selection.rangeCount > 0) {
             let node = selection.getRangeAt(0).commonAncestorContainer;
-            if (node.nodeType === 3) node = node.parentElement!; // 文本节点 -> 父元素
+            if (node.nodeType === 3) node = node.parentElement!;
             
             if (node instanceof HTMLElement) {
-                // 3.1 优先检查内联 style 属性 (Raw Value)
-                // 这能避免浏览器 fallback 导致的字体不一致 (例如用户设置了 'YouYuan' 但系统显示 'Microsoft YaHei')
-                // 也能更准确地捕捉到用户的设置意图
                 const inlineStyle = node.style[styleKey as any];
                 if (inlineStyle) return inlineStyle;
 
-                // 3.2 回退到计算样式 (Computed Value)
                 const computed = window.getComputedStyle(node);
                 const val = computed[styleKey as any];
                 if (val) {
                     if (styleKey === 'lineHeight') {
-                         // 计算样式返回可能是 "normal" 或 px 值，处理起来比较麻烦
-                         // 如果是 normal，返回默认值
                          if (val === 'normal') return defaultValue;
-                         // 如果是 px，尝试转换成倍数? 太复杂，暂且忽略 px 返回，依赖 defaultValue
-                         // 或者如果是纯数字字符串，直接返回
                          if (!isNaN(Number(val))) return val;
                     } else {
                         return val;
@@ -95,14 +81,10 @@ function getActiveStyle(editor: IDomEditor, styleKey: 'fontSize' | 'fontFamily' 
                 }
             }
         }
-    } catch (e) {
-        // 忽略 DOM 访问错误
-    }
+    } catch (e) { }
 
-    // 4. 返回全局默认值
     return defaultValue;
 }
-
 
 // 自定义字号菜单
 class WordFontSizeMenu implements ISelectMenu {
@@ -110,42 +92,29 @@ class WordFontSizeMenu implements ISelectMenu {
   readonly tag = 'select'
   readonly width = 80
   
-  // 选项列表
   getOptions(_editor: IDomEditor) {
     return WORD_FONT_SIZES.map(opt => ({
       value: opt.value,
       text: opt.label,
-      selected: false // 获取值时会自动判断
+      selected: false
     }))
   }
 
-  // 获取当前值
   getValue(editor: IDomEditor): string | boolean {
     let val = getActiveStyle(editor, 'fontSize', '12pt');
-    
     if (!val) return '12pt';
-    
     val = val.toString().toLowerCase();
     
-    // 兼容性处理：如果是 px，尝试转换为 pt 以匹配菜单选项
     if (val.includes('px')) {
         const num = parseFloat(val);
         if (!isNaN(num)) {
-            // 1px ≈ 0.75pt
             const pt = num * 0.75;
-            // 构造 pt 字符串，例如 "12pt" 或 "10.5pt"
             const ptStr = `${Number(pt.toFixed(2))}pt`; 
-            
-            // 检查这个 pt 值是否在我们的 Word 字号列表中
             // @ts-ignore
             const match = WORD_FONT_SIZES.some(opt => opt.value === ptStr);
-            
-            if (match) {
-                val = ptStr;
-            }
+            if (match) val = ptStr;
         }
     }
-    
     return val;
   }
 
@@ -153,9 +122,7 @@ class WordFontSizeMenu implements ISelectMenu {
   isDisabled(_editor: IDomEditor): boolean { return false }
 
   exec(editor: IDomEditor, value: string | boolean) {
-    if (value) {
-      editor.addMark('fontSize', value.toString())
-    }
+    if (value) editor.addMark('fontSize', value.toString())
   }
 }
 
@@ -176,27 +143,17 @@ class WordFontFamilyMenu implements ISelectMenu {
   getValue(editor: IDomEditor): string | boolean {
     const activeFont = getActiveStyle(editor, 'fontFamily', 'Microsoft YaHei');
     if (!activeFont) return 'Microsoft YaHei';
-
-    // 标准化处理：去除引号，取第一个字体（处理 fallback）
-    // 例如: '"SimSun", sans-serif' -> 'SimSun'
     const normalized = activeFont.split(',')[0].replace(/['"]/g, '').trim().toLowerCase();
     
-    // 在选项中查找匹配项 (不区分大小写，同时匹配 value, text 和 alias)
     // @ts-ignore
     const match = FONT_FAMILY_OPTIONS.find(opt => {
         const target = normalized;
-        // 匹配 value (如 '黑体')
         if (opt.value.toLowerCase() === target) return true;
-        // 匹配 text (如 '黑体')
         if (opt.text.toLowerCase() === target) return true;
-        // 匹配 alias (如 'simhei')
         // @ts-ignore
         if (opt.alias && opt.alias.some(a => a.toLowerCase() === target)) return true;
-        
         return false;
     });
-
-    // 如果找到了匹配项，返回标准 value；否则尝试返回去引号后的值（因为如果不去引号，肯定匹配不上任何 value）
     return match ? match.value : activeFont.replace(/['"]/g, '');
   }
 
@@ -204,9 +161,7 @@ class WordFontFamilyMenu implements ISelectMenu {
   isDisabled(_editor: IDomEditor): boolean { return false }
 
   exec(editor: IDomEditor, value: string | boolean) {
-    if (value) {
-      editor.addMark('fontFamily', value.toString());
-    }
+    if (value) editor.addMark('fontFamily', value.toString());
   }
 }
 
@@ -228,7 +183,6 @@ class WordLineHeightMenu implements ISelectMenu {
     }
 
     getValue(editor: IDomEditor): string | boolean {
-        // 默认行高 1.5
         return getActiveStyle(editor, 'lineHeight', '1.5');
     }
 
@@ -237,14 +191,13 @@ class WordLineHeightMenu implements ISelectMenu {
 
     exec(editor: IDomEditor, value: string | boolean) {
         if (value) {
-            // WangEditor 设置行高是针对 Block 的
             // @ts-ignore
             editor.setNode({ lineHeight: value.toString() });
         }
     }
 }
 
-// 注册菜单 (防止热更新重复注册)
+// 注册菜单
 const fontSizeMenuKey = 'wordFontSize';
 const fontFamilyMenuKey = 'wordFontFamily';
 const lineHeightMenuKey = 'wordLineHeight';
@@ -253,25 +206,97 @@ try {
   Boot.registerMenu({ key: fontSizeMenuKey, factory() { return new WordFontSizeMenu() }, });
   Boot.registerMenu({ key: fontFamilyMenuKey, factory() { return new WordFontFamilyMenu() }, });
   Boot.registerMenu({ key: lineHeightMenuKey, factory() { return new WordLineHeightMenu() }, });
-} catch (e) {
-  // 忽略重复注册错误
+} catch (e) { }
+
+// 暴露给父组件的接口
+export interface EditorRef {
+  insertHtml: (html: string) => void;
+  getSelectionText: () => string;
+  saveSelection: () => string; // 保存选区并返回选中文本
+  replaceSelection: (html: string) => void; // 恢复选区并替换内容
+  focus: () => void; // 聚焦编辑器
 }
 
 interface EditorProps {
   html: string;
   onChange?: (html: string) => void;
+  onSelectionChange?: (text: string) => void; // 新增：选区变化回调
   readOnly?: boolean;
-  docId?: string; // 新增: 用于加载/保存文档配置
+  docId?: string;
 }
 
-
-// ... (保留 Editor 组件定义)
-
-
-export default function EditorComponent({ html, onChange, readOnly = false, docId }: EditorProps) {
+// 使用 forwardRef 包装组件
+const EditorComponent = forwardRef<EditorRef, EditorProps>(({ html, onChange, onSelectionChange, readOnly = false, docId }, ref) => {
   const [editor, setEditor] = useState<IDomEditor | null>(null); 
   
+  // 保存的选区信息
+  const savedSelectionRef = useRef<any>(null);
+  
+  // 暴露方法给父组件
+  useImperativeHandle(ref, () => ({
+    insertHtml: (content: string) => {
+      if (editor) {
+        editor.focus();
+        editor.dangerouslyInsertHtml(content);
+      }
+    },
+    getSelectionText: () => {
+       if (editor) {
+           return editor.getSelectionText();
+       }
+       return '';
+    },
+    saveSelection: () => {
+      if (editor) {
+        // 保存当前选区
+        savedSelectionRef.current = editor.selection;
+        return editor.getSelectionText();
+      }
+      return '';
+    },
+    replaceSelection: (content: string) => {
+      if (editor) {
+        // 先聚焦编辑器
+        editor.focus();
+        
+        // 如果有保存的选区，恢复它
+        if (savedSelectionRef.current) {
+          try {
+            editor.select(savedSelectionRef.current);
+          } catch (e) {
+            console.warn('恢复选区失败:', e);
+          }
+        }
+        
+        // 处理多行文本：按换行符分割，使用 insertBreak 模拟回车
+        // 这样可以确保：
+        // 1. 正确创建新的 Block（段落），避免结构错误
+        // 2. 继承上一段落的样式
+        const lines = content.split('\n');
+        
+        lines.forEach((line, index) => {
+            if (line) {
+                editor.insertText(line);
+            }
+            // 如果不是最后一行，插入换行符
+            if (index < lines.length - 1) {
+                editor.insertBreak();
+            }
+        });
+        
+        // 清除保存的选区
+        savedSelectionRef.current = null;
+      }
+    },
+    focus: () => {
+      if (editor) {
+        editor.focus();
+      }
+    }
+  }));
+
   // 配置加载状态
+
   const [settingsLoaded, setSettingsLoaded] = useState(false);
 
   // 页面边距状态 (单位: cm)
@@ -712,13 +737,49 @@ export default function EditorComponent({ html, onChange, readOnly = false, docI
     };
   }, [editor]);
 
+  // 监听选区变化 (独立于内容变化)
+  useEffect(() => {
+    if (!editor) return;
+
+    const handleSelection = () => {
+        if (editor.isDestroyed) return;
+
+        // 只有当编辑器拥有焦点时才更新
+        // 这样避免了点击 AI 面板输入框时，因编辑器失焦而导致的错误更新
+        if (editor.isFocused()) {
+            // 自动更新保存的选区，确保 replaceSelection 能使用最新选区
+            // @ts-ignore
+            savedSelectionRef.current = editor.selection;
+            
+            if (onSelectionChange) {
+                try {
+                    // 使用浏览器原生 API 获取完整选中文本
+                    // editor.getSelectionText() 可能返回不完整的文本
+                    const browserSelection = window.getSelection();
+                    const text = browserSelection ? browserSelection.toString() : '';
+                    onSelectionChange(text);
+                } catch (e) {
+                    console.warn('Get selection failed:', e);
+                }
+            }
+        }
+    };
+
+    // 使用全局 selectionchange 事件，因为 WangEditor/Slate 没有直接暴露可靠的 selection 事件
+    document.addEventListener('selectionchange', handleSelection);
+
+    return () => {
+        document.removeEventListener('selectionchange', handleSelection);
+    };
+  }, [editor, onSelectionChange]);
+
   const handleChange = (editor: IDomEditor) => {
     let currentHtml = editor.getHtml();
     
-    // 1. 提取并注入表格列宽 (保留此功能)
-    currentHtml = extractTableWidths(currentHtml);
-    
-    // 移除原有 doc-settings 注入逻辑
+    // 1. 提取并注入表格列宽 (保留此功能，但需注意不要破坏 DOM 结构)
+    // 如果此函数导致了 Slate 路径错误，应暂时禁用或优化
+    // currentHtml = extractTableWidths(currentHtml); 
+    // 暂时保持开启，但如果你发现输入时光标跳动或报错，请注释掉上面这行
     
     onChange?.(currentHtml);
   };
@@ -935,4 +996,6 @@ export default function EditorComponent({ html, onChange, readOnly = false, docI
       </div>
     </div>
   );
-}
+});
+
+export default EditorComponent;

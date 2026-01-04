@@ -216,7 +216,7 @@ class TextStyle(BaseModel):
     lineHeight: Optional[float] = None
     color: Optional[str] = None
     textAlign: Optional[Literal["left", "center", "right", "justify"]] = None
-    textIndent: Optional[int] = None
+    textIndent: Optional[Union[int, str]] = None
     letterSpacing: Optional[float] = None
     backgroundColor: Optional[str] = None
 

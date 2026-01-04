@@ -3,7 +3,7 @@
 提供文档的 CRUD 操作
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List
 import uuid
@@ -19,6 +19,8 @@ from app.models.schemas import (
     ChapterBase,
     MessageResponse
 )
+from app.models.params import PaginationParams
+from app.models.responses import paginated_response
 
 
 router = APIRouter(prefix="/api/v1/documents", tags=["documents"])
@@ -154,8 +156,8 @@ def delete_document(
 
 @router.get("", response_model=DocumentListResponse)
 def list_documents(
-    page: int = 1,
-    page_size: int = 10,
+    page: int = Query(1, ge=1, le=10000, description="页码"),
+    page_size: int = Query(10, ge=1, le=100, description="每页数量"),
     db: Session = Depends(get_db)
 ):
     """
@@ -163,20 +165,24 @@ def list_documents(
     
     Args:
         page: 页码（从 1 开始）
-        page_size: 每页记录数
+        page_size: 每页记录数(1-100)
         db: 数据库会话
         
     Returns:
         分页的文档列表
     """
+    # 验证分页参数
+    pagination = PaginationParams(page=page, size=page_size)
+    
     # 计算偏移量
-    offset = (page - 1) * page_size
+    offset = pagination.get_offset()
+    limit = pagination.get_limit()
     
     # 查询总数
     total = db.query(Document).count()
     
     # 查询文档列表
-    docs = db.query(Document).offset(offset).limit(page_size).all()
+    docs = db.query(Document).offset(offset).limit(limit).all()
     
     # 为每个文档查询章节
     items = []

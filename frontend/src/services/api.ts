@@ -3,7 +3,8 @@
  * 封装所有后端 API 调用
  */
 
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
+import axiosRetry from 'axios-retry';
 
 // 从环境变量读取后端 API 地址
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/+$/, '');
@@ -11,18 +12,38 @@ const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:800
 // 配置 axios 实例
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000,
+  timeout: 30000, // 30秒超时
   headers: {
     'Content-Type': 'application/json'
+  }
+});
+
+// 配置重试机制
+axiosRetry(api, {
+  retries: 3, // 重试3次
+  retryDelay: axiosRetry.exponentialDelay, // 指数退避
+  retryCondition: (error: AxiosError) => {
+    // 网络错误或 5xx 错误时重试
+    return axiosRetry.isNetworkOrIdempotentRequestError(error) ||
+           (error.response?.status ? error.response.status >= 500 : false);
+  },
+  onRetry: (retryCount, error) => {
+    console.log(`请求重试 ${retryCount}/3:`, error.config?.url);
   }
 });
 
 // 添加请求拦截器
 api.interceptors.request.use(
   (config: any) => {
+    // 可以在这里添加认证 token
+    // const token = localStorage.getItem('token');
+    // if (token) {
+    //   config.headers.Authorization = `Bearer ${token}`;
+    // }
     return config;
   },
   (error: any) => {
+    console.error('请求错误:', error);
     return Promise.reject(error);
   }
 );
@@ -32,12 +53,45 @@ api.interceptors.response.use(
   (response: any) => {
     return response;
   },
-  (error: any) => {
+  (error: AxiosError) => {
+    // 统一错误处理
     if (error.response) {
-      console.error('API Error:', error.response.status, error.response.data);
+      const status = error.response.status;
+      const data: any = error.response.data;
+      
+      // 根据状态码处理
+      switch (status) {
+        case 400:
+          console.error('请求参数错误:', data.detail || data.message);
+          break;
+        case 401:
+          console.error('未授权,请登录');
+          // 可以跳转到登录页
+          // window.location.href = '/login';
+          break;
+        case 403:
+          console.error('禁止访问');
+          break;
+        case 404:
+          console.error('资源不存在:', data.detail || data.message);
+          break;
+        case 422:
+          console.error('参数验证失败:', data.errors || data.detail);
+          break;
+        case 500:
+          console.error('服务器错误:', data.detail || '请稍后重试');
+          break;
+        default:
+          console.error('API 错误:', status, data);
+      }
+    } else if (error.request) {
+      // 请求已发送但没有收到响应
+      console.error('网络错误: 无法连接到服务器');
     } else {
-      console.error('Network Error:', error.message);
+      // 请求配置出错
+      console.error('请求配置错误:', error.message);
     }
+    
     return Promise.reject(error);
   }
 );
@@ -61,6 +115,11 @@ export const chapterService = {
   getDocument: async (id: string) => {
     // 后端返回的文档包含 chapters 列表
     const response = await api.get(`/api/v1/documents/${id}`);
+    return response.data;
+  },
+
+  deleteDocument: async (id: string) => {
+    const response = await api.delete(`/api/v1/documents/${id}`);
     return response.data;
   },
 

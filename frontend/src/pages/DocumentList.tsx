@@ -1,14 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { chapterService } from '../services/chapterService';
+import Toast, { useToast } from '../components/Toast';
+import { DocumentListSkeleton } from '../components/Loading';
+import ConfirmDialog, { useConfirmDialog } from '../components/ConfirmDialog';
 import './DocumentList.css';
 
 const DocumentList: React.FC = () => {
   const [documents, setDocuments] = useState<any[]>([]);
-  // const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  
+  // UI 组件 Hooks
+  const toast = useToast();
+  const confirm = useConfirmDialog();
 
   useEffect(() => {
     loadDocs();
@@ -18,9 +24,10 @@ const DocumentList: React.FC = () => {
     setLoading(true);
     try {
       const res = await chapterService.getDocumentsList(page, 10);
-      setDocuments(res.items); // setTotal(res.total);
+      setDocuments(res.items);
     } catch (err) {
       console.error(err);
+      toast.error('加载文档列表失败');
     } finally {
       setLoading(false);
     }
@@ -31,11 +38,35 @@ const DocumentList: React.FC = () => {
     if (title) {
       try {
         const newDoc = await chapterService.createDocument(title);
+        toast.success('文档创建成功');
         // 创建成功后直接跳转
         navigate(`/doc/${newDoc.id}`);
       } catch (e) {
-        alert('创建失败');
+        toast.error('创建文档失败');
       }
+    }
+  };
+
+  const handleDelete = (doc: any) => {
+    confirm.confirmDelete(doc.title, async () => {
+      try {
+        await chapterService.deleteDocument(doc.id);
+        toast.success('文档已删除');
+        loadDocs(); // 重新加载列表
+      } catch (e) {
+        toast.error('删除失败');
+      }
+    });
+  };
+
+  const handleExport = async (e: React.MouseEvent, doc: any) => {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      chapterService.exportDocumentToDocx(doc.id);
+      toast.success('导出成功');
+    } catch (e) {
+      toast.error('导出失败');
     }
   };
 
@@ -46,7 +77,9 @@ const DocumentList: React.FC = () => {
         <button className="primary-btn" onClick={handleCreate}>新建文档</button>
       </div>
       
-      {loading ? <div>加载中...</div> : (
+      {loading ? (
+        <DocumentListSkeleton />
+      ) : (
         <div className="doc-grid">
           {documents.map(doc => (
             <Link to={`/doc/${doc.id}`} key={doc.id} className="doc-card">
@@ -57,16 +90,24 @@ const DocumentList: React.FC = () => {
                 <p style={{marginTop: 5, fontSize: 10}}>
                   {doc.created_at ? new Date(doc.created_at).toLocaleDateString() : ''}
                 </p>
-                <button 
-                  className="doc-action-btn"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    chapterService.exportDocumentToDocx(doc.id);
-                  }}
-                >
-                  导出 Word
-                </button>
+                <div className="doc-actions">
+                  <button 
+                    className="doc-action-btn"
+                    onClick={(e) => handleExport(e, doc)}
+                  >
+                    导出 Word
+                  </button>
+                  <button 
+                    className="doc-action-btn doc-delete-btn"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleDelete(doc);
+                    }}
+                  >
+                    删除
+                  </button>
+                </div>
               </div>
             </Link>
           ))}
@@ -79,6 +120,10 @@ const DocumentList: React.FC = () => {
         <span>第 {page} 页</span>
         <button disabled={documents.length < 10} onClick={() => setPage(p => p + 1)}>下一页</button>
       </div>
+
+      {/* UI 组件 */}
+      <Toast messages={toast.messages} onRemove={toast.removeToast} />
+      <ConfirmDialog {...confirm.dialogProps} />
     </div>
   );
 };

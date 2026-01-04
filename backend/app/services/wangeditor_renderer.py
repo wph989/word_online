@@ -416,7 +416,11 @@ class WangEditorRenderer:
         
         # 缩进
         if "textIndent" in styles:
-            css_parts.append(f"text-indent: {styles['textIndent']}px")
+            indent = styles["textIndent"]
+            if isinstance(indent, (int, float)):
+                css_parts.append(f"text-indent: {indent}px")
+            else:
+                css_parts.append(f"text-indent: {indent}")
         
         # 边距
         if "marginTop" in styles:

@@ -157,12 +157,12 @@ class HtmlParser:
                     if isinstance(child, Tag):
                         child_block = self._parse_element(child) 
                         if child_block:
-                            self.content.blocks.append(child_block)
+                            self.blocks.append(child_block)
                     elif isinstance(child, NavigableString):
                         text = str(child).strip()
                         if text:
                             block_id = f"para-{uuid.uuid4().hex[:8]}"
-                            self.content.blocks.append(ParagraphBlock(
+                            self.blocks.append(ParagraphBlock(
                                 id=block_id,
                                 type="paragraph",
                                 text=text,
@@ -719,10 +719,7 @@ class HtmlParser:
         # 缩进
         indent_match = re.search(r'text-indent:\s*([^;]+)', style_attr)
         if indent_match:
-            indent_str = indent_match.group(1).strip()
-            indent_num = re.search(r'(\d+)', indent_str)
-            if indent_num:
-                styles["textIndent"] = int(indent_num.group(1))
+            styles["textIndent"] = indent_match.group(1).strip()
         
         return styles
     

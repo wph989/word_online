@@ -5,7 +5,7 @@
 
 from sqlalchemy import Column, String, JSON, DateTime, Integer, ForeignKey, Text
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, timezone
 from app.core.database import Base
 
 
@@ -25,13 +25,13 @@ class Document(Base):
     # 时间戳
     created_at = Column(
         DateTime, 
-        default=datetime.utcnow, 
+        default=lambda: datetime.now(timezone.utc), 
         comment="创建时间"
     )
     updated_at = Column(
         DateTime, 
-        default=datetime.utcnow, 
-        onupdate=datetime.utcnow,
+        default=lambda: datetime.now(timezone.utc), 
+        onupdate=lambda: datetime.now(timezone.utc),
         comment="更新时间"
     )
     
@@ -42,6 +42,15 @@ class Document(Base):
         back_populates="document",
         cascade="all, delete-orphan",
         order_by="Chapter.order_index"
+    )
+    
+    # 关联关系：文档配置 (一对一)
+    # cascade="all, delete-orphan" 确保删除文档时同时删除配置
+    settings = relationship(
+        "DocumentSettings",
+        back_populates="document",
+        uselist=False,
+        cascade="all, delete-orphan"
     )
 
 
@@ -76,11 +85,11 @@ class Chapter(Base):
     stylesheet = Column(JSON, nullable=False, comment="StyleSheet JSON（样式数据）")
     
     # 时间戳
-    created_at = Column(DateTime, default=datetime.utcnow, comment="创建时间")
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), comment="创建时间")
     updated_at = Column(
         DateTime, 
-        default=datetime.utcnow, 
-        onupdate=datetime.utcnow,
+        default=lambda: datetime.now(timezone.utc), 
+        onupdate=lambda: datetime.now(timezone.utc),
         comment="更新时间"
     )
     
@@ -118,16 +127,17 @@ class DocumentSettings(Base):
     )
     
     # 时间戳
-    created_at = Column(DateTime, default=datetime.utcnow, comment="创建时间")
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), comment="创建时间")
     updated_at = Column(
         DateTime, 
-        default=datetime.utcnow, 
-        onupdate=datetime.utcnow,
+        default=lambda: datetime.now(timezone.utc), 
+        onupdate=lambda: datetime.now(timezone.utc),
         comment="更新时间"
     )
     
     # 关联关系：配置属于一个文档
-    document = relationship("Document", backref="settings", uselist=False)
+    # 关联关系：配置属于一个文档
+    document = relationship("Document", back_populates="settings")
 
 
 class Asset(Base):
@@ -155,4 +165,4 @@ class Asset(Base):
     )
     
     # 时间戳
-    created_at = Column(DateTime, default=datetime.utcnow, comment="创建时间")
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), comment="创建时间")

@@ -4,13 +4,25 @@ FastAPI 应用主入口
 """
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+from sqlalchemy.exc import SQLAlchemyError
+import logging
+import traceback
 
 from app.core.config import settings
 from app.core.database import engine, Base
-from app.api.v1 import chapters, documents, export, upload, ai_chapters, document_settings
+from app.api.v1 import chapters, documents, export, upload, ai_chapters, document_settings, ai_edit
+
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO if not settings.DEBUG else logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -51,6 +63,60 @@ app.add_middleware(
 )
 
 
+# ============ 全局异常处理器 ============
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """处理请求验证错误"""
+    logger.warning(f"请求验证失败: {request.url} - {exc.errors()}")
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={
+            "detail": "请求参数验证失败",
+            "errors": exc.errors()
+        }
+    )
+
+
+@app.exception_handler(SQLAlchemyError)
+async def database_exception_handler(request: Request, exc: SQLAlchemyError):
+    """处理数据库错误"""
+    logger.error(f"数据库错误: {request.url} - {str(exc)}", exc_info=True)
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={
+            "detail": "数据库操作失败,请稍后重试"
+        }
+    )
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """处理所有未捕获的异常"""
+    logger.error(
+        f"未处理的异常: {request.url} - {type(exc).__name__}: {str(exc)}\n"
+        f"Traceback: {traceback.format_exc()}"
+    )
+    
+    # 开发环境返回详细错误信息
+    if settings.DEBUG:
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "detail": f"{type(exc).__name__}: {str(exc)}",
+                "traceback": traceback.format_exc().split('\n')
+            }
+        )
+    
+    # 生产环境返回通用错误信息
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={
+            "detail": "服务器内部错误,请联系管理员"
+        }
+    )
+
+
 # 注册路由
 app.include_router(documents.router)
 app.include_router(chapters.router)
@@ -58,6 +124,7 @@ app.include_router(export.router)
 app.include_router(upload.router)
 app.include_router(ai_chapters.router)  # AI 章节处理 API
 app.include_router(document_settings.router)  # 文档配置 API
+app.include_router(ai_edit.router)  # AI 编辑 API
 
 
 # 挂载静态文件目录（用于提供上传的图片）

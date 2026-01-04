@@ -83,8 +83,8 @@ def update_chapter_content(
         else:
             stylesheet = StyleSheet(**chapter.stylesheet)
         
-        # 使用渲染器生成新的 HTML
-        renderer = HtmlRenderer(content, stylesheet)
+        # 使用 WangEditor 兼容渲染器生成新的 HTML
+        renderer = WangEditorRenderer(content, stylesheet)
         new_html = renderer.render()
         
         # 更新数据库
@@ -163,7 +163,7 @@ def update_chapter_blocks(
                         updated_count += 1
         
         # 重新渲染 HTML
-        renderer = HtmlRenderer(content, stylesheet)
+        renderer = WangEditorRenderer(content, stylesheet)
         new_html = renderer.render()
         
         # 更新数据库

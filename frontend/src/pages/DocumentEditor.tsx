@@ -1,8 +1,12 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import Editor from '../components/Editor'
+import Editor, { EditorRef } from '../components/Editor'
 import Sidebar from '../components/Sidebar'
 import ErrorBoundary from '../components/ErrorBoundary'
+import Toast, { useToast } from '../components/Toast'
+import Loading from '../components/Loading'
+import ConfirmDialog, { useConfirmDialog } from '../components/ConfirmDialog'
+import AIPanel from '../components/AIPanel'
 import type { Chapter } from '../types/api'
 import { chapterService } from '../services/chapterService'
 
@@ -15,15 +19,21 @@ interface ChapterMeta {
 const DocumentEditor: React.FC = () => {
   const { docId } = useParams<{ docId: string }>();
   const navigate = useNavigate();
+  const editorRef = useRef<EditorRef>(null);
 
   const [docTitle, setDocTitle] = useState('');
   const [chapterList, setChapterList] = useState<ChapterMeta[]>([]);
   const [chapter, setChapter] = useState<Chapter | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [selectedText, setSelectedText] = useState(''); // 实时选中文本
 
   // 临时存储编辑器内容，用于保存
   const [currentHtml, setCurrentHtml] = useState('');
+
+  // UI 组件 Hooks
+  const toast = useToast();
+  const confirm = useConfirmDialog();
 
   useEffect(() => {
     if (docId) {
@@ -52,7 +62,7 @@ const DocumentEditor: React.FC = () => {
       }
     } catch (err) {
       console.error('Initialization failed:', err);
-      // alert('加载失败');
+      toast.error('加载文档失败');
     } finally {
       setLoading(false);
     }
@@ -73,6 +83,7 @@ const DocumentEditor: React.FC = () => {
       setCurrentHtml(data.html_content || '');
     } catch (e) {
       console.error("Failed to load chapter", e);
+      toast.error('加载章节失败');
     }
   };
 
@@ -93,28 +104,35 @@ const DocumentEditor: React.FC = () => {
       // 自动选中新章节
       setChapter(newChapter);
       setCurrentHtml(newChapter.html_content || '');
+      toast.success('章节创建成功');
     } catch (e) {
-      alert("创建章节失败");
+      toast.error('创建章节失败');
     }
   };
 
   const handleDeleteChapter = async (id: string) => {
-    try {
-      await chapterService.deleteChapter(id);
-      const newList = chapterList.filter(c => c.id !== id);
-      setChapterList(newList);
+    const chapterToDelete = chapterList.find(c => c.id === id);
+    if (!chapterToDelete) return;
 
-      if (chapter && chapter.id === id) {
-        if (newList.length > 0) {
-          loadChapter(newList[0].id);
-        } else {
-          setChapter(null);
-          setCurrentHtml('');
+    confirm.confirmDelete(chapterToDelete.title, async () => {
+      try {
+        await chapterService.deleteChapter(id);
+        const newList = chapterList.filter(c => c.id !== id);
+        setChapterList(newList);
+
+        if (chapter && chapter.id === id) {
+          if (newList.length > 0) {
+            loadChapter(newList[0].id);
+          } else {
+            setChapter(null);
+            setCurrentHtml('');
+          }
         }
+        toast.success('章节已删除');
+      } catch (e) {
+        toast.error('删除失败');
       }
-    } catch (e) {
-      alert("删除失败");
-    }
+    });
   };
 
   const handleRenameChapter = async (id: string, newTitle: string) => {
@@ -128,8 +146,9 @@ const DocumentEditor: React.FC = () => {
       if (chapter && chapter.id === id) {
         setChapter({ ...chapter, title: newTitle });
       }
+      toast.success('重命名成功');
     } catch (e) {
-      alert("重命名失败");
+      toast.error('重命名失败');
     }
   };
 
@@ -147,13 +166,93 @@ const DocumentEditor: React.FC = () => {
         title: chapter.title
       });
       console.log('Saved successfully');
+      toast.success('保存成功');
       // 保存后重新加载以获取后端渲染的HTML
       await loadChapter(chapter.id);
     } catch (err) {
-      alert('保存失败');
+      toast.error('保存失败');
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleExportChapter = () => {
+    if (!chapter) return;
+    try {
+      chapterService.exportChapterToDocx(chapter.id);
+      toast.success('导出成功');
+    } catch (e) {
+      toast.error('导出失败');
+    }
+  };
+
+  const handleExportDocument = () => {
+    if (!docId) return;
+    try {
+      chapterService.exportDocumentToDocx(docId);
+      toast.success('导出成功');
+    } catch (e) {
+      toast.error('导出失败');
+    }
+  };
+
+  // AI 编辑功能
+  const handleAIEdit = async (action: string, text: string): Promise<string> => {
+    try {
+      const response = await fetch('/api/v1/ai/edit/text', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          text,
+          action,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('AI 操作失败');
+      }
+
+      const data = await response.json();
+      return data.edited_text;
+    } catch (error) {
+      console.error('AI 编辑失败:', error);
+      toast.error('AI 处理失败');
+      throw error;
+    }
+  };
+
+  const handleAIInsert = (text: string) => {
+    // 将 AI 生成的文本插入到编辑器末尾
+    if (editorRef.current) {
+      editorRef.current.focus();
+      editorRef.current.insertHtml(`<p>${text}</p>`);
+      toast.success('内容已插入');
+    } else {
+      const newHtml = currentHtml + `<p>${text}</p>`;
+      setCurrentHtml(newHtml);
+      toast.success('内容已追加');
+    }
+  };
+
+  // AI 替换选中内容（保持原格式）
+  const handleAIReplace = (text: string) => {
+    if (editorRef.current) {
+      // 传递纯文本，replaceSelection 会使用 insertText 保留原格式
+      editorRef.current.replaceSelection(text);
+      toast.success('内容已替换');
+    } else {
+      toast.error('无法替换，请重试');
+    }
+  };
+
+  // 保存选区并返回选中文本
+  const saveSelection = () => {
+    if (editorRef.current) {
+      return editorRef.current.saveSelection();
+    }
+    return '';
   };
 
   return (
@@ -168,7 +267,7 @@ const DocumentEditor: React.FC = () => {
         <div className="header-actions">
           <button 
             className="save-btn" 
-            onClick={() => chapter && chapterService.exportChapterToDocx(chapter.id)} 
+            onClick={handleExportChapter} 
             disabled={!chapter}
             style={{ backgroundColor: '#28a745', marginRight: '10px' }}
           >
@@ -176,7 +275,7 @@ const DocumentEditor: React.FC = () => {
           </button>
           <button 
             className="save-btn" 
-            onClick={() => docId && chapterService.exportDocumentToDocx(docId)} 
+            onClick={handleExportDocument} 
             disabled={!docId}
             style={{ backgroundColor: '#17a2b8', marginRight: '10px' }}
           >
@@ -200,14 +299,16 @@ const DocumentEditor: React.FC = () => {
 
         <main>
           {loading ? (
-            <div style={{ padding: 20 }}>Loading...</div>
+            <Loading fullscreen text="加载中..." />
           ) : chapter ? (
             <div className="word-editor-container">
               <ErrorBoundary>
                 <Editor
+                  ref={editorRef}
                   key={chapter.id} // 切换章节时强制重新渲染编辑器
                   html={chapter.html_content || ''}
                   onChange={handleEditorChange}
+                  onSelectionChange={setSelectedText}
                   docId={docId}
                 />
               </ErrorBoundary>
@@ -220,6 +321,17 @@ const DocumentEditor: React.FC = () => {
           )}
         </main>
       </div>
+
+      {/* UI 组件 */}
+      <Toast messages={toast.messages} onRemove={toast.removeToast} />
+      <ConfirmDialog {...confirm.dialogProps} />
+      <AIPanel 
+        onAIEdit={handleAIEdit} 
+        onInsert={handleAIInsert} 
+        onReplace={handleAIReplace}
+        saveSelection={saveSelection}
+        selectedText={selectedText}
+      />
     </div>
   )
 }
