@@ -21,6 +21,7 @@ from .block_processors import (
     add_code,
     add_divider
 )
+from .heading_numbering import create_heading_number_generator
 
 logger = logging.getLogger(__name__)
 
@@ -59,9 +60,16 @@ class DocxExporter:
         self.style_map = self._build_style_map()
         self.cell_style_map = self._build_cell_style_map()
         
+        # 初始化标题编号生成器
+        numbering_config = self.document_settings.get('heading_numbering_style')
+        self.heading_number_generator = create_heading_number_generator(numbering_config)
+        
         logger.info(f"初始化 DocxExporter, Blocks 数量: {len(content.get('blocks', []))}")
         if document_settings:
             logger.info(f"应用文档配置: 页边距={document_settings.get('margin_top', 2.54)}cm(上)")
+            if self.heading_number_generator:
+                style_name = numbering_config.get('style', 'custom') if numbering_config else 'none'
+                logger.info(f"启用标题编号: 样式={style_name}")
     
     def export(self) -> io.BytesIO:
         """
@@ -142,7 +150,7 @@ class DocxExporter:
         if block_type == "paragraph":
             add_paragraph(self.doc, block, self.style_map)
         elif block_type == "heading":
-            add_heading(self.doc, block, self.style_map)
+            add_heading(self.doc, block, self.style_map, self.heading_number_generator)
         elif block_type == "table":
             add_table(self.doc, block, self.cell_style_map)
         elif block_type == "image":

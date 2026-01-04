@@ -169,6 +169,10 @@ class DocumentSettingsUpdate(BaseModel):
         None, 
         description="标题样式配置 (h1-h6)"
     )
+    heading_numbering_style: Optional[Dict[str, Any]] = Field(
+        None,
+        description="标题编号样式配置"
+    )
 
 
 class DocumentSettingsResponse(BaseModel):
@@ -179,6 +183,7 @@ class DocumentSettingsResponse(BaseModel):
     margin_left: float = Field(..., description="左边距 (cm)")
     margin_right: float = Field(..., description="右边距 (cm)")
     heading_styles: Dict[str, Any] = Field(..., description="标题样式配置")
+    heading_numbering_style: Optional[Dict[str, Any]] = Field(None, description="标题编号样式配置")
     created_at: datetime = Field(..., description="创建时间")
     updated_at: datetime = Field(..., description="更新时间")
     

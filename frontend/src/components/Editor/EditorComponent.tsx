@@ -45,6 +45,8 @@ const EditorComponent = forwardRef<EditorRef, EditorProps>(({ html, onChange, on
         setPageMargins,
         headingStyles,
         setHeadingStyles,
+        headingNumberingStyle,
+        setHeadingNumberingStyle,
         syncHeadingStylesToEditor,
         resetSettings
     } = useEditorSettings(docId);
@@ -165,6 +167,7 @@ const EditorComponent = forwardRef<EditorRef, EditorProps>(({ html, onChange, on
       ${['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].map(tag => {
             // @ts-ignore
             const style = headingStyles[tag];
+
             return `
           /* 1. 应用到标题容器 */
           .w-e-text-container [data-slate-editor] ${tag},
@@ -332,8 +335,10 @@ const EditorComponent = forwardRef<EditorRef, EditorProps>(({ html, onChange, on
                 <PageSettings
                     pageMargins={pageMargins}
                     headingStyles={headingStyles}
+                    headingNumberingStyle={headingNumberingStyle}
                     setPageMargins={setPageMargins}
                     setHeadingStyles={setHeadingStyles}
+                    setHeadingNumberingStyle={setHeadingNumberingStyle}
                     resetSettings={resetSettings}
                 />
             )}

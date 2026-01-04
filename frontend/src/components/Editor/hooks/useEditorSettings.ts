@@ -28,6 +28,7 @@ export const useEditorSettings = (docId?: string) => {
     const [settingsLoaded, setSettingsLoaded] = useState(false);
     const [pageMargins, setPageMargins] = useState(DEFAULT_PAGE_MARGINS);
     const [headingStyles, setHeadingStyles] = useState(DEFAULT_HEADING_STYLES);
+    const [headingNumberingStyle, setHeadingNumberingStyle] = useState<{ enabled: boolean; style?: string } | null>(null);
 
     // 1. 加载文档配置
     useEffect(() => {
@@ -45,6 +46,12 @@ export const useEditorSettings = (docId?: string) => {
                     if (data.heading_styles) {
                         setHeadingStyles(data.heading_styles);
                     }
+
+                    // 加载标题编号样式
+                    if (data.heading_numbering_style) {
+                        setHeadingNumberingStyle(data.heading_numbering_style);
+                    }
+
                     setSettingsLoaded(true);
                 })
                 .catch((err: any) => {
@@ -67,13 +74,14 @@ export const useEditorSettings = (docId?: string) => {
                     margin_bottom: pageMargins.bottom,
                     margin_left: pageMargins.left,
                     margin_right: pageMargins.right,
-                    heading_styles: headingStyles
+                    heading_styles: headingStyles,
+                    heading_numbering_style: headingNumberingStyle
                 }).catch((err: any) => console.error('自动保存配置失败:', err));
             }, 1000); // 1秒防抖
 
             return () => clearTimeout(timer);
         }
-    }, [docId, settingsLoaded, pageMargins, headingStyles]);
+    }, [docId, settingsLoaded, pageMargins, headingStyles, headingNumberingStyle]);
 
     // 3. 监听 headingStyles 变化，同步到 editor 实例供 Menu 使用
     const syncHeadingStylesToEditor = (editor: IDomEditor | null) => {
@@ -88,6 +96,7 @@ export const useEditorSettings = (docId?: string) => {
     const resetSettings = () => {
         setPageMargins(DEFAULT_PAGE_MARGINS);
         setHeadingStyles(DEFAULT_HEADING_STYLES);
+        setHeadingNumberingStyle(null);
     };
 
     return {
@@ -96,6 +105,8 @@ export const useEditorSettings = (docId?: string) => {
         setPageMargins,
         headingStyles,
         setHeadingStyles,
+        headingNumberingStyle,
+        setHeadingNumberingStyle,
         syncHeadingStylesToEditor,
         resetSettings
     };

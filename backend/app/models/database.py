@@ -145,6 +145,16 @@ class DocumentSettings(Base):
         comment="标题样式配置 (H1-H6)"
     )
     
+    # 标题编号样式配置 (JSON 格式)
+    # 格式: {"style": "style1", "enabled": true}
+    # style 可选值: "style1" (一、二、三), "style2" (1、2、3), "style3" (1.、2.、3.), "style4" (第一章、第二章)
+    heading_numbering_style = Column(
+        JSON,
+        nullable=True,
+        default=None,
+        comment="标题编号样式配置"
+    )
+    
     # 时间戳
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), comment="创建时间")
     updated_at = Column(

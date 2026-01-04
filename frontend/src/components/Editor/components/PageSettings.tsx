@@ -13,16 +13,23 @@ interface PageSettingsProps {
         right: number;
     };
     headingStyles: any;
+    headingNumberingStyle: {
+        enabled: boolean;
+        style?: string;
+    } | null;
     setPageMargins: (margins: any) => void;
     setHeadingStyles: (styles: any) => void;
+    setHeadingNumberingStyle: (style: any) => void;
     resetSettings: () => void;
 }
 
 export const PageSettings: React.FC<PageSettingsProps> = ({
     pageMargins,
     headingStyles,
+    headingNumberingStyle,
     setPageMargins,
     setHeadingStyles,
+    setHeadingNumberingStyle,
     resetSettings
 }) => {
     return (
@@ -81,6 +88,35 @@ export const PageSettings: React.FC<PageSettingsProps> = ({
                         style={{ width: '50px', padding: '4px', border: '1px solid #d9d9d9', borderRadius: '4px' }}
                     />
                 </div>
+            </div>
+
+            {/* 标题编号样式区域 */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '20px', borderBottom: '1px solid #eee', paddingBottom: '10px' }}>
+                <strong style={{ minWidth: '80px' }}>标题编号:</strong>
+                <select
+                    value={headingNumberingStyle?.enabled ? (headingNumberingStyle.style || 'style2') : 'none'}
+                    onChange={e => {
+                        const value = e.target.value;
+                        if (value === 'none') {
+                            setHeadingNumberingStyle(null);
+                        } else {
+                            setHeadingNumberingStyle({ enabled: true, style: value });
+                        }
+                    }}
+                    style={{
+                        flex: 1,
+                        padding: '6px 8px',
+                        border: '1px solid #d9d9d9',
+                        borderRadius: '4px',
+                        fontSize: '13px'
+                    }}
+                >
+                    <option value="none">不使用编号</option>
+                    <option value="style1">中文混合（一、二、三 / 1.1 / (1)）</option>
+                    <option value="style2">纯数字（1、2、3 / 1.1 / 1.1.1）</option>
+                    <option value="style3">数字点号（1. / 1.1 / 1.1.1）</option>
+                    <option value="style4">章节格式（第一章 / 1.1 / 1.1.1）</option>
+                </select>
             </div>
 
             {/* 标题样式区域 */}

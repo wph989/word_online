@@ -104,7 +104,8 @@ def save_document_settings(
             margin_bottom=update_data.get('margin_bottom', 2.54),
             margin_left=update_data.get('margin_left', 3.17),
             margin_right=update_data.get('margin_right', 3.17),
-            heading_styles=heading_styles
+            heading_styles=heading_styles,
+            heading_numbering_style=update_data.get('heading_numbering_style')
         )
         db.add(settings)
     else:

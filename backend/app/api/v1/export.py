@@ -124,7 +124,8 @@ def export_chapter_to_docx(
                 'margin_bottom': doc_settings.margin_bottom,
                 'margin_left': doc_settings.margin_left,
                 'margin_right': doc_settings.margin_right,
-                'heading_styles': doc_settings.heading_styles
+                'heading_styles': doc_settings.heading_styles,
+                'heading_numbering_style': doc_settings.heading_numbering_style
             }
         
         # 创建导出器（传入文档配置）
@@ -273,7 +274,8 @@ def export_document_to_docx(
                 'margin_bottom': doc_settings.margin_bottom,
                 'margin_left': doc_settings.margin_left,
                 'margin_right': doc_settings.margin_right,
-                'heading_styles': doc_settings.heading_styles
+                'heading_styles': doc_settings.heading_styles,
+                'heading_numbering_style': doc_settings.heading_numbering_style
             }
         
         # 创建导出器（传入文档配置）
@@ -428,7 +430,8 @@ def export_batch_chapters(
                 'margin_bottom': doc_settings.margin_bottom,
                 'margin_left': doc_settings.margin_left,
                 'margin_right': doc_settings.margin_right,
-                'heading_styles': doc_settings.heading_styles
+                'heading_styles': doc_settings.heading_styles,
+                'heading_numbering_style': doc_settings.heading_numbering_style
             }
         
         # 创建导出器（传入文档配置）
