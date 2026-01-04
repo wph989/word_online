@@ -160,19 +160,24 @@ def export_document_to_docx(
     doc_id: str,
     db: Session = Depends(get_db),
     include_chapter_titles: bool = Query(True, description="是否包含章节标题"),
-    chapter_title_level: int = Query(1, ge=1, le=6, description="章节标题的级别(1-6)")
+    chapter_title_level: int = Query(1, ge=1, le=6, description="已弃用，现使用章节实际层级")
 ):
     """
-    导出整个文档为 Word 文件(合并所有章节)
+    导出整个文档为 Word 文件(按层级顺序合并所有章节及其子章节)
     
     Args:
         doc_id: 文档 ID
         db: 数据库会话
         include_chapter_titles: 是否在每个章节前添加章节标题
-        chapter_title_level: 章节标题的级别(1-6)
+        chapter_title_level: 已弃用，现使用章节的实际 level 字段
         
     Returns:
         .docx 文件流
+        
+    说明:
+        - 按照章节层级顺序导出：先导出顶级章节及其所有子章节，再导出下一个顶级章节
+        - 每个章节使用其实际的 level 值作为标题级别
+        - 在顶级章节之间自动添加分页符
         
     Raises:
         404: 文档不存在或没有章节
@@ -184,15 +189,37 @@ def export_document_to_docx(
         if not doc:
             raise HTTPException(status_code=404, detail=f"文档不存在: {doc_id}")
         
-        # 查询所有章节(按顺序)
-        chapters = db.query(Chapter).filter(
-            Chapter.doc_id == doc_id
+        # 递归收集章节树的函数
+        def collect_chapter_tree(parent_chapter):
+            """递归收集章节及其子章节"""
+            chapters = [parent_chapter]
+            
+            # 查询子章节（按 order_index 排序）
+            children = db.query(Chapter).filter(
+                Chapter.parent_id == parent_chapter.id
+            ).order_by(Chapter.order_index.asc()).all()
+            
+            # 递归收集每个子章节
+            for child in children:
+                chapters.extend(collect_chapter_tree(child))
+            
+            return chapters
+        
+        # 只查询顶级章节(parent_id 为 NULL)
+        top_level_chapters = db.query(Chapter).filter(
+            Chapter.doc_id == doc_id,
+            Chapter.parent_id.is_(None)
         ).order_by(Chapter.order_index.asc()).all()
         
-        if not chapters:
+        if not top_level_chapters:
             raise HTTPException(status_code=404, detail="文档没有章节")
         
-        logger.info(f"开始导出文档: {doc.title} (ID: {doc_id}), 章节数: {len(chapters)}")
+        # 收集所有章节（包括子章节），保持层级顺序
+        all_chapters = []
+        for top_chapter in top_level_chapters:
+            all_chapters.extend(collect_chapter_tree(top_chapter))
+        
+        logger.info(f"开始导出文档: {doc.title} (ID: {doc_id}), 顶级章节数: {len(top_level_chapters)}, 总章节数: {len(all_chapters)}")
         
         # 合并所有章节的 Content 和 StyleSheet
         merged_content = {"blocks": []}
@@ -202,13 +229,15 @@ def export_document_to_docx(
             "rules": []
         }
         
-        for idx, chapter in enumerate(chapters):
+        for idx, chapter in enumerate(all_chapters):
             # 添加章节标题(如果需要)
             if include_chapter_titles:
+                # 使用章节的实际层级
+                title_level = min(chapter.level, 6)
                 merged_content["blocks"].append({
                     "id": f"chapter-title-{chapter.id}",
                     "type": "heading",
-                    "level": chapter_title_level,
+                    "level": title_level,
                     "text": chapter.title,
                     "marks": []
                 })
@@ -221,12 +250,16 @@ def export_document_to_docx(
             chapter_rules = chapter.stylesheet.get("rules", []) if isinstance(chapter.stylesheet, dict) else []
             merged_stylesheet["rules"].extend(chapter_rules)
             
-            # 在章节之间添加分页符(除了最后一个章节)
-            if idx < len(chapters) - 1:
-                merged_content["blocks"].append({
-                    "id": f"page-break-{idx}",
-                    "type": "divider"
-                })
+            # 在顶级章节之间添加分页符(除了最后一个顶级章节)
+            # 只在顶级章节结束时添加分页符
+            if idx < len(all_chapters) - 1:
+                next_chapter = all_chapters[idx + 1]
+                # 如果下一个章节是顶级章节，添加分页符
+                if next_chapter.parent_id is None:
+                    merged_content["blocks"].append({
+                        "id": f"page-break-{idx}",
+                        "type": "divider"
+                    })
         
         # 查询文档配置
         doc_settings = db.query(DocumentSettings).filter(
@@ -277,7 +310,7 @@ def export_batch_chapters(
     db: Session = Depends(get_db)
 ):
     """
-    批量导出多个章节为单个 Word 文档
+    批量导出多个章节为单个 Word 文档（自动包含所有子章节）
     
     Args:
         request: 批量导出请求(包含章节 ID 列表)
@@ -285,6 +318,12 @@ def export_batch_chapters(
         
     Returns:
         .docx 文件流
+        
+    说明:
+        - 对于每个请求的章节，会自动递归包含其所有子章节
+        - 按请求的章节顺序导出，每个章节及其子章节作为一个完整单元
+        - 每个章节使用其实际的 level 值作为标题级别
+        - 在请求的顶级章节之间自动添加分隔符
         
     Raises:
         400: 章节列表为空
@@ -297,7 +336,23 @@ def export_batch_chapters(
         
         logger.info(f"开始批量导出 {len(request.chapter_ids)} 个章节")
         
-        # 查询所有章节
+        # 递归收集章节树的函数
+        def collect_chapter_tree(parent_chapter):
+            """递归收集章节及其子章节"""
+            chapters = [parent_chapter]
+            
+            # 查询子章节（按 order_index 排序）
+            children = db.query(Chapter).filter(
+                Chapter.parent_id == parent_chapter.id
+            ).order_by(Chapter.order_index.asc()).all()
+            
+            # 递归收集每个子章节
+            for child in children:
+                chapters.extend(collect_chapter_tree(child))
+            
+            return chapters
+        
+        # 查询所有请求的章节
         chapters = db.query(Chapter).filter(
             Chapter.id.in_(request.chapter_ids)
         ).all()
@@ -311,9 +366,14 @@ def export_batch_chapters(
                 detail=f"以下章节不存在: {', '.join(missing_ids)}"
             )
         
-        # 按请求的顺序排序章节
+        # 按请求的顺序排序章节，并收集每个章节的子章节
         chapter_map = {ch.id: ch for ch in chapters}
-        ordered_chapters = [chapter_map[cid] for cid in request.chapter_ids]
+        all_chapters = []
+        for cid in request.chapter_ids:
+            # 递归收集该章节及其所有子章节
+            all_chapters.extend(collect_chapter_tree(chapter_map[cid]))
+        
+        logger.info(f"收集到 {len(all_chapters)} 个章节（包含子章节）")
         
         # 合并内容
         merged_content = {"blocks": []}
@@ -323,12 +383,13 @@ def export_batch_chapters(
             "rules": []
         }
         
-        for idx, chapter in enumerate(ordered_chapters):
-            # 添加章节标题
+        for idx, chapter in enumerate(all_chapters):
+            # 添加章节标题，使用章节的实际层级
+            title_level = min(chapter.level, 6)
             merged_content["blocks"].append({
                 "id": f"chapter-title-{chapter.id}",
                 "type": "heading",
-                "level": 1,
+                "level": title_level,
                 "text": chapter.title,
                 "marks": []
             })
@@ -341,15 +402,19 @@ def export_batch_chapters(
             chapter_rules = chapter.stylesheet.get("rules", []) if isinstance(chapter.stylesheet, dict) else []
             merged_stylesheet["rules"].extend(chapter_rules)
             
-            # 章节之间添加分隔
-            if idx < len(ordered_chapters) - 1:
-                merged_content["blocks"].append({
-                    "id": f"divider-{idx}",
-                    "type": "divider"
-                })
+            # 在请求的顶级章节之间添加分隔符
+            # 检查下一个章节是否是新的请求章节（而非当前章节的子章节）
+            if idx < len(all_chapters) - 1:
+                next_chapter = all_chapters[idx + 1]
+                # 如果下一个章节的 ID 在请求列表中，说明是新的顶级章节
+                if next_chapter.id in request.chapter_ids:
+                    merged_content["blocks"].append({
+                        "id": f"divider-{idx}",
+                        "type": "divider"
+                    })
         
         # 查询文档配置（使用第一个章节的文档ID）
-        first_chapter_doc_id = ordered_chapters[0].doc_id if ordered_chapters else None
+        first_chapter_doc_id = all_chapters[0].doc_id if all_chapters else None
         doc_settings = None
         if first_chapter_doc_id:
             doc_settings = db.query(DocumentSettings).filter(
