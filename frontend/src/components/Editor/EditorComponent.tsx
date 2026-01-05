@@ -12,6 +12,7 @@ import { EDITOR_DEFAULTS } from '../../config/editorDefaults';
 import { useEditorSettings, useDraggable } from './hooks';
 import './menus'; // 注册自定义菜单
 import { PageSettings } from './components';
+import { fixTextIndentFontSize } from './utils/fixTextIndent';
 
 // 暴露给父组件的接口
 export interface EditorRef {
@@ -219,6 +220,13 @@ const EditorComponent = forwardRef<EditorRef, EditorProps>(({ html, onChange, on
                     // @ts-ignore
                     if (!editor.isDestroyed) {
                         editor.setHtml(html);
+
+                        // 修复首行缩进的 em 单位问题
+                        // 需要等待 DOM 更新完成
+                        setTimeout(() => {
+                            const editorDom = editorContainerRef.current?.querySelector('[data-slate-editor]') as HTMLElement;
+                            fixTextIndentFontSize(editorDom);
+                        }, 100);
                     }
                 }
             } catch (e) {
@@ -284,6 +292,13 @@ const EditorComponent = forwardRef<EditorRef, EditorProps>(({ html, onChange, on
         // 如果此函数导致了 Slate 路径错误，应暂时禁用或优化
         // currentHtml = extractTableWidths(currentHtml, editorContainerRef); 
         // 暂时保持开启，但如果你发现输入时光标跳动或报错，请注释掉上面这行
+
+        // 2. 修复首行缩进的 em 单位问题（实时修复，用户修改字号后立即生效）
+        // 使用 setTimeout 而不是 requestAnimationFrame，给 WangEditor 更多时间完成 DOM 更新
+        setTimeout(() => {
+            const editorDom = editorContainerRef.current?.querySelector('[data-slate-editor]') as HTMLElement;
+            fixTextIndentFontSize(editorDom);
+        }, 50);
 
         onChange?.(currentHtml);
     };
