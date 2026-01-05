@@ -10,6 +10,7 @@ import { EDITOR_DEFAULTS } from '../../config/editorDefaults';
 
 // 导入拆分后的模块
 import { useEditorSettings, useDraggable } from './hooks';
+import './menus'; // 注册自定义菜单
 import { PageSettings } from './components';
 
 // 暴露给父组件的接口

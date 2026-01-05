@@ -386,6 +386,7 @@ class WangEditorRenderer:
     def _styles_to_css(self, styles: Dict[str, any]) -> str:
         """
         将样式字典转换为 CSS 字符串
+        按照前端期望的顺序输出样式属性
         
         Args:
             styles: 样式字典
@@ -398,23 +399,7 @@ class WangEditorRenderer:
         
         css_parts = []
         
-        # 文本对齐
-        if "textAlign" in styles:
-            css_parts.append(f"text-align: {styles['textAlign']}")
-        
-        # 字号
-        if "fontSize" in styles:
-            css_parts.append(f"font-size: {styles['fontSize']}px")
-        
-        # 颜色
-        if "color" in styles:
-            css_parts.append(f"color: {styles['color']}")
-        
-        # 行高
-        if "lineHeight" in styles:
-            css_parts.append(f"line-height: {styles['lineHeight']}")
-        
-        # 缩进
+        # 1. 缩进 (优先输出，与前端保持一致)
         if "textIndent" in styles:
             indent = styles["textIndent"]
             if isinstance(indent, (int, float)):
@@ -422,7 +407,28 @@ class WangEditorRenderer:
             else:
                 css_parts.append(f"text-indent: {indent}")
         
-        # 边距
+        # 2. 行高 (紧随缩进)
+        if "lineHeight" in styles:
+            lh = styles['lineHeight']
+            # 如果是整数，去掉小数点
+            if isinstance(lh, float) and lh.is_integer():
+                css_parts.append(f"line-height: {int(lh)}")
+            else:
+                css_parts.append(f"line-height: {lh}")
+        
+        # 3. 文本对齐
+        if "textAlign" in styles:
+            css_parts.append(f"text-align: {styles['textAlign']}")
+        
+        # 4. 字号
+        if "fontSize" in styles:
+            css_parts.append(f"font-size: {styles['fontSize']}px")
+        
+        # 5. 颜色
+        if "color" in styles:
+            css_parts.append(f"color: {styles['color']}")
+        
+        # 6. 边距
         if "marginTop" in styles:
             css_parts.append(f"margin-top: {styles['marginTop']}px")
         if "marginBottom" in styles:
@@ -435,7 +441,7 @@ class WangEditorRenderer:
             else:
                 css_parts.append(f"margin-left: {margin_left}")
         
-        # 内边距
+        # 7. 内边距
         if "paddingTop" in styles:
             css_parts.append(f"padding-top: {styles['paddingTop']}px")
         if "paddingBottom" in styles:
@@ -445,7 +451,7 @@ class WangEditorRenderer:
         if "paddingRight" in styles:
             css_parts.append(f"padding-right: {styles['paddingRight']}px")
         
-        # 宽度
+        # 8. 宽度
         if "width" in styles:
             width = styles["width"]
             if isinstance(width, int):
@@ -453,7 +459,7 @@ class WangEditorRenderer:
             else:
                 css_parts.append(f"width: {width}")
         
-        # 边框
+        # 9. 边框
         if "borderWidth" in styles:
             css_parts.append(f"border-width: {styles['borderWidth']}px")
         if "borderStyle" in styles:

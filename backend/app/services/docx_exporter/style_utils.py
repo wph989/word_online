@@ -66,9 +66,33 @@ def apply_paragraph_style(para, block_id: str, style_map: Dict[str, Dict[str, An
     # 缩进
     text_indent = styles.get("textIndent")
     if text_indent:
-        indent_pt = parse_length(text_indent)
-        if indent_pt is not None:
-            para.paragraph_format.first_line_indent = Pt(indent_pt)
+        # 特殊处理 em 单位：自动转换为 Word 的字符单位 (Character Units)
+        # 1em = 100 (百分之一字符)
+        if isinstance(text_indent, str) and 'em' in text_indent.lower():
+            import re
+            match = re.search(r'(-?\d+(\.\d+)?)', text_indent)
+            if match:
+                em_value = float(match.group(1))
+                chars_value = int(em_value * 100) # 2em -> 200
+                
+                # 直接操作 XML 设置字符单位缩进
+                pPr = para.paragraph_format.element.get_or_add_pPr()
+                ind = pPr.get_or_add_ind()
+                # 必须清除可能存在的磅值设置，否则 Word 可能会混淆
+                if 'w:firstLine' in ind.attrib:
+                    del ind.attrib['w:firstLine']
+                ind.set(qn('w:firstLineChars'), str(chars_value))
+        else:
+            # 其他单位（px, pt, cm等）使用原有逻辑 (磅值)
+            indent_pt = parse_length(text_indent)
+            if indent_pt is not None:
+                # 清除字符单位设置，优先使用磅值
+                pPr = para.paragraph_format.element.get_or_add_pPr()
+                ind = pPr.get_or_add_ind()
+                if 'w:firstLineChars' in ind.attrib:
+                    del ind.attrib['w:firstLineChars']
+                    
+                para.paragraph_format.first_line_indent = Pt(indent_pt)
     
     # 段落间距
     margin_top = styles.get("marginTop")

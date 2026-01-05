@@ -2,7 +2,7 @@
  * 自定义行高菜单
  */
 
-import { ISelectMenu, IDomEditor } from '@wangeditor/editor';
+import { ISelectMenu, IDomEditor, SlateTransforms } from '@wangeditor/editor';
 import { getActiveStyle } from '../utils/styleHelpers';
 
 class WordLineHeightMenu implements ISelectMenu {
@@ -30,8 +30,7 @@ class WordLineHeightMenu implements ISelectMenu {
 
     exec(editor: IDomEditor, value: string | boolean) {
         if (value) {
-            // @ts-ignore
-            editor.setNode({ lineHeight: value.toString() });
+            SlateTransforms.setNodes(editor, { lineHeight: value.toString() } as any);
         }
     }
 }
