@@ -1,0 +1,22 @@
+# Node modules
+node_modules/
+
+# 构建产物
+dist/
+build/
+
+# 环境变量
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+
+# 日志
+*.log
+
+# 操作系统
+.DS_Store
+Thumbs.db

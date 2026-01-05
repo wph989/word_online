@@ -1,0 +1,297 @@
+:root {
+  --bg-color: #f3f2f1;
+  --paper-color: #ffffff;
+  --primary-color: #2b579a;
+  --text-color: #333333;
+  --border-color: #e1e1e1;
+  --toolbar-height: 44px;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* 覆盖 index.css 中的 body */
+body {
+  background-color: var(--bg-color);
+}
+
+.app-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.app-header {
+  height: 48px;
+  background-color: var(--primary-color);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  z-index: 100;
+  flex-shrink: 0;
+}
+
+.app-header h1 {
+  font-size: 16px;
+  font-weight: 500;
+  margin: 0;
+}
+
+.app-header h1 small {
+  opacity: 0.8;
+  font-weight: 400;
+  font-size: 0.9em;
+}
+
+.save-btn {
+  background-color: white;
+  color: var(--primary-color);
+  border: none;
+  padding: 6px 16px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.save-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.app-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+  background-color: var(--bg-color);
+}
+
+/* 适配 WangEditor */
+.w-e-toolbar {
+  border-bottom: 1px solid var(--border-color) !important;
+  background-color: #fff !important;
+  justify-content: center;
+}
+
+.w-e-text-container {
+  background-color: var(--bg-color) !important;
+  padding: 24px 0;
+}
+
+.word-editor-container {
+  flex: 1;
+  height: 100%;
+  overflow: hidden;
+  /* 让内部组件处理滚动 */
+  display: flex;
+  flex-direction: column;
+}
+
+/* 编辑区域模拟 A4 纸 */
+.w-e-scroll {
+  padding: 0 20px;
+  /* 滚动条留空 */
+  display: flex !important;
+  justify-content: center !important;
+}
+
+/* 实际的编辑内容区域 - 适配 React 组件结构 */
+/* 使用 [data-slate-editor] 精确匹配编辑器根节点，避免匹配到 table cell 等其他 contenteditable 元素 */
+.w-e-text-container [data-slate-editor] {
+  width: 210mm;
+  min-height: 297mm;
+  background-color: white;
+  margin: 0 auto 40px auto;
+  padding: 25.4mm !important;
+  /* A4 边距 */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-sizing: border-box;
+
+  /* 字体和排版优化 (From original Editor.css) */
+  font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+  /* 移除 font-size 的强制设置，允许内联样式生效 */
+  line-height: 1.5;
+}
+
+@media screen and (max-width: 850px) {
+  .w-e-text-container [data-slate-editor] {
+    width: 100%;
+    margin: 0;
+    padding: 16px !important;
+  }
+}
+
+/* --- 下面是从原 Editor.css 移植的核心样式修正 --- */
+
+/* 确保语义标记在所有字体中都能正确显示 - 使用最强选择器 */
+.w-e-text-container [data-slate-editor] strong,
+.w-e-text-container [data-slate-editor] b {
+  font-weight: 700 !important;
+  font-synthesis: style weight !important;
+}
+
+/* 恢复原生斜体，确保基线完美对齐 */
+.w-e-text-container [data-slate-editor] em,
+.w-e-text-container [data-slate-editor] i {
+  /* 使用原生斜体 */
+  font-style: italic !important;
+  /* 恢复 inline 显示，这是基线对齐的关键 */
+  display: inline !important;
+
+  /* 移除之前的 transform hack */
+  transform: none !important;
+  margin: 0 !important;
+
+  /* 确保基线对齐 */
+  vertical-align: baseline !important;
+  line-height: inherit !important;
+}
+
+/* 关键修复：确保 span 内联样式不被父元素覆盖 */
+/* 重置 em/i 的 transform，避免影响内部 span */
+.w-e-text-container [data-slate-editor] em span,
+.w-e-text-container [data-slate-editor] i span {
+  transform: none !important;
+  display: inline !important;
+  margin: 0 !important;
+}
+
+/* 强制确保所有嵌套在语义标签内的 span 的内联样式生效 */
+.w-e-text-container [data-slate-editor] strong span[style],
+.w-e-text-container [data-slate-editor] em span[style],
+.w-e-text-container [data-slate-editor] u span[style],
+.w-e-text-container [data-slate-editor] strong em span[style],
+.w-e-text-container [data-slate-editor] strong u span[style],
+.w-e-text-container [data-slate-editor] em u span[style],
+.w-e-text-container [data-slate-editor] strong em u span[style] {
+  /* 移除有害的 all: unset，让样式自然继承 */
+  /* all: unset; */
+
+  /* 确保 display 为 inline，维持行内布局 */
+  display: inline !important;
+
+  /* 不需要手动 revert，浏览器会自动处理继承 */
+}
+
+/* 强制确保所有内联样式的基线对齐 */
+.w-e-text-container [data-slate-editor] span,
+.w-e-text-container [data-slate-editor] strong,
+.w-e-text-container [data-slate-editor] b,
+.w-e-text-container [data-slate-editor] em,
+.w-e-text-container [data-slate-editor] i,
+.w-e-text-container [data-slate-editor] u {
+  /* 核心：强制基线对齐 */
+  vertical-align: baseline !important;
+  /* 移除 line-height: 1，让浏览器根据字号自动计算合适的行高，避免由于行高过小导致的对齐怪异 */
+  line-height: normal !important;
+}
+
+/* 斜体+下划线：回归自然，无需特殊处理 */
+.w-e-text-container [data-slate-editor] em u,
+.w-e-text-container [data-slate-editor] i u,
+.w-e-text-container [data-slate-editor] u em,
+.w-e-text-container [data-slate-editor] u i {
+  text-decoration: underline !important;
+  font-style: italic !important;
+  display: inline !important;
+  vertical-align: baseline !important;
+  transform: none !important;
+}
+
+/* 彻底移除之前的伪元素残留规则 */
+.w-e-text-container [data-slate-editor] em u::after,
+.w-e-text-container [data-slate-editor] i u::after,
+.w-e-text-container [data-slate-editor] u em::after,
+.w-e-text-container [data-slate-editor] u i::after {
+  content: none !important;
+  display: none !important;
+}
+
+/* ==========================================================================
+   下划线终极修复 (基于 :has 选择器)
+   解决大号字体双重下划线和穿模问题
+   ========================================================================== */
+
+/* 1. 默认：u 标签绘制下划线 (普通文本) */
+.w-e-text-container [data-slate-editor] u {
+  text-decoration: underline !important;
+  text-decoration-color: currentColor !important;
+  text-underline-offset: auto !important;
+  vertical-align: baseline !important;
+  display: inline !important;
+}
+
+/* 2. 抑制：如果 u 包含 span (意味着有字号/颜色样式)，u 自身变透明 */
+/* 这样可以隐藏父级线条，防止双重线下划线 */
+.w-e-text-container [data-slate-editor] u:has(span) {
+  text-decoration-color: transparent !important;
+}
+
+/* 3. 接管：强制内部 span 绘制自己的下划线 */
+.w-e-text-container [data-slate-editor] u>span {
+  text-decoration: underline !important;
+  text-decoration-color: currentColor !important;
+}
+
+/* 彻底清除伪元素 */
+.w-e-text-container [data-slate-editor] u::after,
+.w-e-text-container [data-slate-editor] u::before {
+  content: none !important;
+  display: none !important;
+}
+
+/* 列表缩进修正 (From original Editor.css) */
+.w-e-text-container ul,
+.w-e-text-container ol {
+  margin: 10px 0 10px 20px;
+}
+
+/* 修复悬浮工具栏 (hover bar) 遮挡内容的问题 */
+/* 通过 CSS transform 将工具栏向上偏移 100% + Extra Spacing */
+/* .w-e-hover-bar 是 WangEditor v5 悬浮菜单的容器类名 */
+/* 修复所有悬浮工具栏遮挡内容的问题 */
+/* 强制将所有类型的浮动菜单向上推移足够远的距离，确保不遮挡内容 */
+.w-e-hover-bar,
+.w-e-menu-tooltip-group,
+.w-e-modal,
+/* 部分特殊插件的弹出层 */
+.w-e-panel-container {
+  /* 基础偏移：自身高度的 100% */
+  /* 额外偏移：-60px，足以避开大号标题 (H1) */
+  transform: translateY(-100%) !important;
+  margin-top: -60px !important;
+  pointer-events: auto !important;
+  z-index: 10000 !important;
+}
+ / *   :_6R>f:yRrR�~  * / 
+ . w - e - t e x t a r e a - d i v i d e r   { 
+     m a r g i n :   2 0 p x   0 ; 
+     h e i g h t :   a u t o   ! i m p o r t a n t ; 
+     d i s p l a y :   b l o c k   ! i m p o r t a n t ; 
+ } 
+ . w - e - t e x t a r e a - d i v i d e r   h r   { 
+     d i s p l a y :   b l o c k ; 
+     h e i g h t :   1 p x ; 
+     b a c k g r o u n d :   # e 8 e 8 e 8 ; 
+     b o r d e r :   n o n e ; 
+ } 
+  
+ 
