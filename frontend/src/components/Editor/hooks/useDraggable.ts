@@ -3,7 +3,7 @@
  */
 
 import { useEffect } from 'react';
-import { IDomEditor } from '@wangeditor/editor';
+import { IDomEditor } from '@wangeditor-next/editor';
 
 export const useDraggable = (editor: IDomEditor | null) => {
   useEffect(() => {

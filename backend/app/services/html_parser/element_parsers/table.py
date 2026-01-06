@@ -141,9 +141,29 @@ def extract_column_widths(table: Tag, table_id: str, col_count: int, style_rules
         style_rules: 样式规则列表
     """
     # 尝试从 colgroup 提取
-    colgroup = table.find('colgroup')
-    if colgroup:
-        cols = colgroup.find_all('col')
+    # 优先选择没有 contentEditable="false" 且包含 col 的 colgroup
+    colgroups = table.find_all('colgroup')
+    target_colgroup = None
+    
+    if colgroups:
+        # 1. 优先找 "真实" 的 colgroup (非编辑器辅助用的)
+        valid_colgroups = [cg for cg in colgroups if cg.get('contentEditable') != 'false']
+        
+        if valid_colgroups:
+            # 如果有多个有效 colgroup，优先选择列数与 max_cols 匹配的
+            # 或者直接取第一个(通常只有一个有效 colgroup)
+            target_colgroup = valid_colgroups[0]
+            for cg in valid_colgroups:
+                if len(cg.find_all('col')) == col_count:
+                    target_colgroup = cg
+                    break
+        else:
+            # 如果只有辅助 colgroup (不常见), 退而求其次
+             if len(colgroups) > 0:
+                target_colgroup = colgroups[0]
+
+    if target_colgroup:
+        cols = target_colgroup.find_all('col')
         for idx, col in enumerate(cols):
             if idx >= col_count:
                 break

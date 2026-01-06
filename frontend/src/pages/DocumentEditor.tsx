@@ -9,6 +9,7 @@ import ConfirmDialog, { useConfirmDialog } from '../components/ConfirmDialog'
 import AIPanel from '../components/AIPanel'
 import type { Chapter } from '../types/api'
 import { chapterService } from '../services/chapterService'
+import { extractTableWidths } from '../components/Editor/utils/tableUtils'
 
 interface ChapterMeta {
   id: string;
@@ -23,6 +24,7 @@ const DocumentEditor: React.FC = () => {
   // ... (hooks) ...
   const navigate = useNavigate();
   const editorRef = useRef<EditorRef>(null);
+  const editorContainerRef = useRef<HTMLDivElement>(null);
 
   const [docTitle, setDocTitle] = useState('');
   const [chapterList, setChapterList] = useState<ChapterMeta[]>([]);
@@ -193,9 +195,15 @@ const DocumentEditor: React.FC = () => {
     if (!chapter) return;
     setSaving(true);
     try {
-      console.log('Saving HTML:', currentHtml.substring(0, 200)); // Debug log
+      // 在保存前提取表格列宽信息
+      let htmlToSave = currentHtml;
+      if (editorContainerRef.current) {
+        htmlToSave = extractTableWidths(currentHtml, editorContainerRef);
+      }
+
+      console.log('Saving HTML:', htmlToSave.substring(0, 200)); // Debug log
       await chapterService.updateChapter(chapter.id, {
-        html_content: currentHtml,
+        html_content: htmlToSave,
         title: chapter.title
       });
       console.log('Saved successfully');
@@ -335,7 +343,7 @@ const DocumentEditor: React.FC = () => {
           {loading ? (
             <Loading fullscreen text="加载中..." />
           ) : chapter ? (
-            <div className="word-editor-container">
+              <div className="word-editor-container" ref={editorContainerRef}>
               <ErrorBoundary>
                 <Editor
                   ref={editorRef}

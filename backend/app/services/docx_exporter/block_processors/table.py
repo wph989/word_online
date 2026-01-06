@@ -5,13 +5,30 @@
 import logging
 from typing import Dict, Any
 
+from docx.shared import Twips
+
 from ..style_utils import apply_cell_style, apply_header_style
 
 logger = logging.getLogger(__name__)
 
+# 像素到 Twips 的转换比例 (1 px ≈ 15 twips，基于 96 DPI)
+PX_TO_TWIPS = 15
 
-def add_table(doc, block: Dict[str, Any], cell_style_map: Dict[str, Dict[str, Any]]):
-    """添加表格(支持合并单元格和单元格样式)"""
+
+def add_table(
+    doc, 
+    block: Dict[str, Any], 
+    cell_style_map: Dict[str, Dict[str, Any]],
+    column_widths: Dict[int, str] = None
+):
+    """添加表格(支持合并单元格、单元格样式和列宽)
+    
+    Args:
+        doc: Word 文档对象
+        block: 表格 Block 数据
+        cell_style_map: 单元格样式映射
+        column_widths: 列宽映射 {column_index: width_value}，宽度值为像素
+    """
     table_data = block.get("data", {})
     rows = table_data.get("rows", 0)
     cols = table_data.get("cols", 0)
@@ -25,6 +42,10 @@ def add_table(doc, block: Dict[str, Any], cell_style_map: Dict[str, Dict[str, An
     # 创建表格
     table = doc.add_table(rows=rows, cols=cols)
     table.style = 'Table Grid'
+    
+    # 应用列宽
+    if column_widths:
+        _apply_column_widths(table, column_widths, cols)
     
     # 构建单元格映射
     cell_map = {tuple(cell["cell"]): cell for cell in cells}
@@ -67,3 +88,32 @@ def add_table(doc, block: Dict[str, Any], cell_style_map: Dict[str, Dict[str, An
             start_cell.merge(end_cell)
         except Exception as e:
             logger.error(f"合并单元格失败: {e}")
+
+
+def _apply_column_widths(table, column_widths: Dict[int, str], cols: int):
+    """应用列宽到表格
+    
+    Args:
+        table: Word 表格对象
+        column_widths: 列宽映射 {column_index: width_value}，宽度值为像素字符串
+        cols: 列数
+    """
+    try:
+        for col_idx in range(cols):
+            width_str = column_widths.get(col_idx)
+            if width_str:
+                try:
+                    # 将像素转换为 Twips
+                    width_px = float(width_str)
+                    width_twips = int(width_px * PX_TO_TWIPS)
+                    
+                    # 设置每一行的单元格宽度（确保列宽一致）
+                    for row in table.rows:
+                        if col_idx < len(row.cells):
+                            row.cells[col_idx].width = Twips(width_twips)
+                    
+                    logger.debug(f"应用列宽: 列{col_idx} = {width_px}px -> {width_twips} twips")
+                except ValueError as e:
+                    logger.warning(f"解析列宽失败 (列{col_idx}): {width_str}, 错误: {e}")
+    except Exception as e:
+        logger.error(f"应用列宽失败: {e}")

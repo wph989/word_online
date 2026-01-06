@@ -374,6 +374,10 @@ class TableRenderer:
         if "borderColor" in self.styles:
             css_parts.append(f"border-color: {self.styles['borderColor']}")
         
+        # 表格布局
+        if "tableLayout" in self.styles:
+            css_parts.append(f"table-layout: {self.styles['tableLayout']}")
+        
         return "; ".join(css_parts)
     
     def _build_cell_style(self, row_idx: int, col_idx: int) -> str:

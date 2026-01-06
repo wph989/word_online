@@ -1,5 +1,5 @@
-import { Boot } from '@wangeditor/editor';
-import { DOMElement } from '@wangeditor/editor/dist/editor/src/utils/dom';
+import { Boot } from '@wangeditor-next/editor';
+import { DOMElement } from '@wangeditor-next/editor/dist/editor/src/utils/dom';
 
 /**
  * 解析 HTML 样式到编辑器属性

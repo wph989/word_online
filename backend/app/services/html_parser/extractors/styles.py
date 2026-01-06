@@ -175,5 +175,10 @@ def extract_table_styles(table: Tag) -> Dict[str, Any]:
     collapse_match = re.search(r'border-collapse:\s*([^;]+)', style_attr)
     if collapse_match:
         styles["borderCollapse"] = collapse_match.group(1).strip()
+
+    # 表格布局 (critical for fixed width columns)
+    layout_match = re.search(r'table-layout:\s*([^;]+)', style_attr)
+    if layout_match:
+        styles["tableLayout"] = layout_match.group(1).strip()
     
     return styles

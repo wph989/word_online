@@ -3,13 +3,13 @@
  */
 
 import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
-import { Editor, Toolbar } from '@wangeditor/editor-for-react';
-import { IDomEditor, IEditorConfig, IToolbarConfig } from '@wangeditor/editor';
-import '@wangeditor/editor/dist/css/style.css';
+import { Editor, Toolbar } from '@wangeditor-next/editor-for-react';
+import { IDomEditor, IEditorConfig, IToolbarConfig, i18nAddResources } from '@wangeditor-next/editor';
+import '@wangeditor-next/editor/dist/css/style.css';
 import { EDITOR_DEFAULTS } from '../../config/editorDefaults';
 
 // 导入拆分后的模块
-import { useEditorSettings, useDraggable } from './hooks';
+import { useEditorSettings, useDraggable, useTableMultiSelect } from './hooks';
 import './menus'; // 注册自定义菜单
 import { PageSettings } from './components';
 import { fixTextIndentFontSize } from './utils/fixTextIndent';
@@ -21,6 +21,8 @@ export interface EditorRef {
     saveSelection: () => string; // 保存选区并返回选中文本
     replaceSelection: (html: string) => void; // 恢复选区并替换内容
     focus: () => void; // 聚焦编辑器
+    getSelectedCells: () => HTMLTableCellElement[]; // 获取选中的表格单元格
+    clearCellSelection: () => void; // 清除单元格选中状态
 }
 
 interface EditorProps {
@@ -32,6 +34,20 @@ interface EditorProps {
 }
 
 export type { EditorProps };
+
+// 添加自定义的多语言资源，覆盖默认的"默认字号"等文本
+// 必须在组件外部或初始化前调用
+i18nAddResources('zh-CN', {
+    fontSize: {
+        default: '小四 (12pt)',
+    },
+    fontFamily: {
+        default: '宋体',
+    },
+    lineHeight: {
+        default: '1.5',
+    }
+});
 
 // 使用 forwardRef 包装组件
 const EditorComponent = forwardRef<EditorRef, EditorProps>(({ html, onChange, onSelectionChange, readOnly = false, docId }, ref) => {
@@ -60,6 +76,11 @@ const EditorComponent = forwardRef<EditorRef, EditorProps>(({ html, onChange, on
 
     // 使用拖拽功能
     useDraggable(editor);
+
+    // 使用表格多选功能
+    const { getSelectedCells, clearSelection: clearCellSelection } = useTableMultiSelect(editor);
+
+
 
     // 暴露方法给父组件
     useImperativeHandle(ref, () => ({
@@ -121,21 +142,20 @@ const EditorComponent = forwardRef<EditorRef, EditorProps>(({ html, onChange, on
             if (editor) {
                 editor.focus();
             }
+        },
+        getSelectedCells: () => {
+            return getSelectedCells();
+        },
+        clearCellSelection: () => {
+            clearCellSelection();
         }
     }));
 
-    // 工具栏配置
+    // 工具栏配置 - 使用 wangEditor-next 默认配置
     const toolbarConfig: Partial<IToolbarConfig> = {
         excludeKeys: [
-            'group-video',
-            'fontSize', // 排除原生字号菜单
-            'fontFamily', // 排除原生字体菜单
-            'lineHeight' // 排除原生行高菜单
-        ],
-        insertKeys: {
-            index: 10,
-            keys: ['wordFontFamily', 'wordFontSize', 'wordLineHeight'] // 插入自定义菜单
-        }
+            'group-video' // 只排除视频组
+        ]
     };
 
     // 编辑器配置
@@ -143,16 +163,62 @@ const EditorComponent = forwardRef<EditorRef, EditorProps>(({ html, onChange, on
         placeholder: '请输入内容...',
         readOnly,
         MENU_CONF: {
+            // 字号配置 - 使用 pt 单位和中文字号别名
+            fontSize: {
+                fontSizeList: [
+                    { name: '初号 (42pt)', value: '42pt' },
+                    { name: '小初 (36pt)', value: '36pt' },
+                    { name: '一号 (26pt)', value: '26pt' },
+                    { name: '小一 (24pt)', value: '24pt' },
+                    { name: '二号 (22pt)', value: '22pt' },
+                    { name: '小二 (18pt)', value: '18pt' },
+                    { name: '三号 (16pt)', value: '16pt' },
+                    { name: '小三 (15pt)', value: '15pt' },
+                    { name: '四号 (14pt)', value: '14pt' },
+                    { name: '小四 (12pt)', value: '12pt' },
+                    { name: '五号 (10.5pt)', value: '10.5pt' },
+                    { name: '小五 (9pt)', value: '9pt' },
+                    { name: '六号 (7.5pt)', value: '7.5pt' },
+                    { name: '小六 (6.5pt)', value: '6.5pt' },
+                    { name: '七号 (5.5pt)', value: '5.5pt' },
+                    { name: '八号 (5pt)', value: '5pt' },
+                ]
+            },
+            // 字体配置 - 使用中文常用字体
+            fontFamily: {
+                fontFamilyList: [
+                    { name: '宋体', value: '宋体, SimSun, serif' },
+                    { name: '黑体', value: '黑体, SimHei, sans-serif' },
+                    { name: '楷体', value: '楷体, KaiTi, serif' },
+                    { name: '仿宋', value: '仿宋, FangSong, serif' },
+                    { name: '微软雅黑', value: '微软雅黑, Microsoft YaHei, sans-serif' },
+                    { name: '华文细黑', value: '华文细黑, STXihei, sans-serif' },
+                    { name: '华文楷体', value: '华文楷体, STKaiti, serif' },
+                    { name: 'Arial', value: 'Arial, sans-serif' },
+                    { name: 'Times New Roman', value: '"Times New Roman", serif' },
+                ]
+            },
+            // 行高配置 - 使用倍数显示
+            lineHeight: {
+                lineHeightList: ['1', '1.15', '1.5', '1.75', '2', '2.5', '3']
+            },
+            // 图片上传配置
             uploadImage: {
                 server: '/api/v1/upload/image',
                 maxFileSize: 5 * 1024 * 1024,
                 maxNumberOfFiles: 10,
                 allowedFileTypes: ['image/*'],
-                metaWithUrl: false,
-                withCredentials: false,
                 timeout: 10 * 1000,
-                onBeforeUpload(file: File) {
-                    return file;
+                metaWithUrl: false,
+                base64LimitSize: 0,
+                onSuccess(file: any, res: any) {
+                    console.log('图片上传成功', file?.name, res);
+                },
+                onFailed(file: any, res: any) {
+                    console.log('图片上传失败', file?.name, res);
+                },
+                onError(file: any, err: any, _res: any) {
+                    console.log('图片上传错误', file?.name, err);
                 },
                 customInsert(res: any, insertFn: (url: string, alt: string, href: string) => void) {
                     const url = res.data?.url || res.url;
@@ -203,6 +269,11 @@ const EditorComponent = forwardRef<EditorRef, EditorProps>(({ html, onChange, on
         font-family: ${EDITOR_DEFAULTS.fontFamily} !important;
         line-height: ${EDITOR_DEFAULTS.lineHeight};
         color: ${EDITOR_DEFAULTS.color};
+      }
+
+      /* 强制给容器增加顶部内边距，解决表格菜单被遮挡问题 */
+      .w-e-text-container {
+        padding-top: 160px !important;
       }
     `}</style>
     );
@@ -367,7 +438,7 @@ const EditorComponent = forwardRef<EditorRef, EditorProps>(({ html, onChange, on
                     onCreated={setEditor}
                     onChange={handleChange}
                     mode="default"
-                    style={{ minHeight: '100%', overflowY: 'hidden' }}
+                    style={{ minHeight: '100%', overflowY: 'visible' }}
                 />
             </div>
         </div>

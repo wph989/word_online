@@ -2,7 +2,7 @@
  * 自定义行高菜单
  */
 
-import { ISelectMenu, IDomEditor, SlateTransforms } from '@wangeditor/editor';
+import { ISelectMenu, IDomEditor, SlateTransforms } from '@wangeditor-next/editor';
 import { getActiveStyle } from '../utils/styleHelpers';
 
 class WordLineHeightMenu implements ISelectMenu {

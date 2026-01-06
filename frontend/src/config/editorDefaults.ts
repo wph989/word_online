@@ -10,7 +10,7 @@
 
 export const EDITOR_DEFAULTS = {
   // 默认字体
-  fontFamily: 'Microsoft YaHei',
+  fontFamily: '宋体',
   
   // 默认字号（使用 pt）
   fontSize: '12pt',
@@ -30,7 +30,7 @@ export const EDITOR_DEFAULTS = {
  * 包含备用字体
  */
 export function getFontFamilyCSS(): string {
-  return `"${EDITOR_DEFAULTS.fontFamily}", "Heiti SC", sans-serif`;
+  return `${EDITOR_DEFAULTS.fontFamily}, SimSun, serif`;
 }
 
 export function getDisplayFontName(): string {

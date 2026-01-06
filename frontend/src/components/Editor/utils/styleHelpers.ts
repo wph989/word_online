@@ -2,7 +2,7 @@
  * 样式辅助工具
  */
 
-import { IDomEditor, DomEditor } from '@wangeditor/editor';
+import { IDomEditor, DomEditor } from '@wangeditor-next/editor';
 
 /**
  * 辅助函数：获取当前选区应用的样式（优先 Mark，其次 Block 默认配置，最后全局默认）

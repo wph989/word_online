@@ -2,7 +2,7 @@
  * 自定义字号菜单
  */
 
-import { ISelectMenu, IDomEditor } from '@wangeditor/editor';
+import { ISelectMenu, IDomEditor } from '@wangeditor-next/editor';
 import { WORD_FONT_SIZES } from '../../../config/editorDefaults';
 import { getActiveStyle } from '../utils/styleHelpers';
 

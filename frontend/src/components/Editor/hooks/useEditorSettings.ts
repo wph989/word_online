@@ -3,7 +3,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { IDomEditor } from '@wangeditor/editor';
+import { IDomEditor } from '@wangeditor-next/editor';
 import { settingsService } from '../../../services/api';
 
 // 页面边距状态默认值 (单位: cm)

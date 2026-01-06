@@ -41,7 +41,8 @@ h4 {
   min-height: 100% !important;
   /* 794px(A4) + 60px(左右padding:30*2) + 额外留白，确保不被压缩 */
   min-width: 860px !important; 
-  padding: 30px !important; /* 关键：给整个编辑区添加内边距，确保纸张不贴边 */
+  padding: 160px 30px 30px 30px !important;
+    /* 关键：增加顶部内边距，防止表格悬浮菜单被遮挡 */
   
   /* 确保 flex 布局相关属性不会干扰 margin auto */
   display: block !important; 
@@ -49,8 +50,9 @@ h4 {
 
 /* 模拟 A4 纸张样式 */
 .w-e-text-container [data-slate-editor] {
-  font-family: "Microsoft YaHei", "Heiti SC", sans-serif !important;
-  font-size: 16px !important;
+  font-family: 宋体, SimSun, serif !important;
+    font-size: 12pt !important;
+    /* 小四号字体 */
   line-height: 1.5 !important;
   color: #333;
   
@@ -117,15 +119,53 @@ h4 {
    防止内容溢出 A4 纸张区域
    ========================================================================== */
 
-/* 1. 表格：强制 maxWidth 为 100%，并使用固定布局 */
+/* 1. 表格容器：透明化，使表格直接对齐到页边距 */
+.w-e-text-container .table-container {
+  display: block !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+/* 移除 table-container 的虚线边框（WangEditor 默认样式） */
+.w-e-text-container .table-container::before,
+.w-e-text-container .table-container::after {
+  display: none !important;
+}
+
+/* 当 table-container 被选中时也不显示边框 */
+.w-e-text-container .table-container.w-e-selected-image-container,
+.w-e-text-container .table-container[data-selected="true"] {
+  outline: none !important;
+  border: none !important;
+}
+
+/* 2. 表格：强制 maxWidth 为 100%，并使用固定布局 */
 .w-e-text-container table {
   width: 100% !important;
   max-width: 100% !important;
   table-layout: fixed !important; /* 关键：固定布局防止被长内容撑开 */
   word-wrap: break-word !important; /* 强制长单词换行 */
-}
-
-/* 2. 代码块：允许滚动，不撑开容器 */
+  border-collapse: collapse !important;
+  
+    /* 3. 表格单元格选中样式（支持多选） */
+    .w-e-text-container td.cell-selected,
+    .w-e-text-container th.cell-selected {
+      background-color: rgba(24, 144, 255, 0.15) !important;
+      outline: 2px solid #1890ff !important;
+      outline-offset: -2px !important;
+      /* 4. 确保表格边框正常显示 */
+        .w-e-text-container table td,
+        .w-e-text-container table th {
+          border: 1px solid #ccc !important;
+          padding: 8px !important;
+          position: relative;
+          /* 5. 代码块：允许滚动，不撑开容器 */
 .w-e-text-container pre {
   max-width: 100% !important;
   white-space: pre-wrap !important; /* 强制代码换行 */
@@ -137,11 +177,11 @@ h4 {
   word-wrap: break-word !important;
 }
 
-/* 3. 图片：自适应宽度 */
+/* 6. 图片：自适应宽度 */
 .w-e-text-container img {
   max-width: 100% !important;
   height: auto !important;
 }
 
-/* 4. 确保编辑器内容容器自身不会溢出 */
+/* 7. 确保编辑器内容容器自身不会溢出 */
 /* 已在上方 A4 样式中统一处理 */

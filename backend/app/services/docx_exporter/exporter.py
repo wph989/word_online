@@ -80,6 +80,7 @@ class DocxExporter:
         
         self.style_map = self._build_style_map()
         self.cell_style_map = self._build_cell_style_map()
+        self.column_width_map = self._build_column_width_map()
         
         logger.info(f"初始化 DocxExporter, Blocks 数量: {len(content.get('blocks', []))}")
         if document_settings:
@@ -152,6 +153,32 @@ class DocxExporter:
         
         return cell_style_map
     
+    def _build_column_width_map(self) -> Dict[str, Dict[int, str]]:
+        """构建表格列宽映射
+        
+        Returns:
+            Dict[table_id, Dict[column_index, width_value]]
+        """
+        column_width_map = {}
+        
+        for rule in self.stylesheet.get("rules", []):
+            target = rule.get("target", {})
+            
+            # 处理表格列宽度样式
+            if target.get("blockType") == "tableColumn":
+                block_ids = target.get("blockIds", [])
+                column_index = target.get("columnIndex")
+                styles = rule.get("style", {})
+                width = styles.get("width")
+                
+                if column_index is not None and width:
+                    for block_id in block_ids:
+                        if block_id not in column_width_map:
+                            column_width_map[block_id] = {}
+                        column_width_map[block_id][column_index] = width
+        
+        return column_width_map
+    
     def _process_block(self, block: Dict[str, Any]):
         """
         处理单个 Block
@@ -166,7 +193,9 @@ class DocxExporter:
         elif block_type == "heading":
             add_heading(self.doc, block, self.style_map, self.heading_number_generator, self.auto_numbering_id)
         elif block_type == "table":
-            add_table(self.doc, block, self.cell_style_map)
+            block_id = block.get("id", "")
+            column_widths = self.column_width_map.get(block_id, {})
+            add_table(self.doc, block, self.cell_style_map, column_widths)
         elif block_type == "image":
             add_image(self.doc, block)
         elif block_type == "code":
