@@ -58,48 +58,52 @@ def apply_default_style_to_run(run, default_style: Optional[Dict[str, Any]], inh
 def apply_marks_to_run(run, marks: List[Dict[str, Any]]):
     """应用标记到 run"""
     for mark in marks:
-        mark_type = mark["type"]
+        # 支持字符串或列表类型的 mark type
+        raw_type = mark["type"]
+        mark_types = raw_type if isinstance(raw_type, list) else [raw_type]
         
-        if mark_type == "bold":
-            run.bold = True
-        elif mark_type == "italic":
-            run.italic = True
-        elif mark_type == "underline":
-            run.underline = True
-        elif mark_type == "strike":
-            run.font.strike = True
-        elif mark_type == "superscript":
-            run.font.superscript = True
-        elif mark_type == "subscript":
-            run.font.subscript = True
-        elif mark_type == "color":
-            color_str = mark.get("value", "")
-            rgb = parse_color(color_str)
-            if rgb:
-                run.font.color.rgb = RGBColor(*rgb)
-        elif mark_type == "backgroundColor":
-            color_str = mark.get("value", "")
-            rgb = parse_color(color_str)
-            if rgb:
-                set_run_background(run, RGBColor(*rgb))
-        elif mark_type == "fontSize":
-            size_str = mark.get("value", "")
-            size = parse_font_size(size_str)
-            if size:
-                run.font.size = Pt(size)
-        elif mark_type == "fontFamily":
-            family = mark.get("value", "")
-            if family:
-                # 清理字体名称：移除引号和多余空格
-                family = family.strip().strip('"').strip("'")
-                # 如果有多个字体（用逗号分隔），只取第一个
-                if ',' in family:
-                    family = family.split(',')[0].strip().strip('"').strip("'")
-                
-                logger.debug(f"应用字体: {family}")
-                run.font.name = family
-                # 同时设置东亚字体（对中文很重要）
-                run._element.rPr.rFonts.set(qn('w:eastAsia'), family)
+        for mark_type in mark_types:
+        
+            if mark_type == "bold":
+                run.bold = True
+            elif mark_type == "italic":
+                run.italic = True
+            elif mark_type == "underline":
+                run.underline = True
+            elif mark_type == "strike":
+                run.font.strike = True
+            elif mark_type == "superscript":
+                run.font.superscript = True
+            elif mark_type == "subscript":
+                run.font.subscript = True
+            elif mark_type == "color":
+                color_str = mark.get("value", "")
+                rgb = parse_color(color_str)
+                if rgb:
+                    run.font.color.rgb = RGBColor(*rgb)
+            elif mark_type == "backgroundColor":
+                color_str = mark.get("value", "")
+                rgb = parse_color(color_str)
+                if rgb:
+                    set_run_background(run, RGBColor(*rgb))
+            elif mark_type == "fontSize":
+                size_str = mark.get("value", "")
+                size = parse_font_size(size_str)
+                if size:
+                    run.font.size = Pt(size)
+            elif mark_type == "fontFamily":
+                family = mark.get("value", "")
+                if family:
+                    # 清理字体名称：移除引号和多余空格
+                    family = family.strip().strip('"').strip("'")
+                    # 如果有多个字体（用逗号分隔），只取第一个
+                    if ',' in family:
+                        family = family.split(',')[0].strip().strip('"').strip("'")
+                    
+                    logger.debug(f"应用字体: {family}")
+                    run.font.name = family
+                    # 同时设置东亚字体（对中文很重要）
+                    run._element.rPr.rFonts.set(qn('w:eastAsia'), family)
 
 
 def set_run_background(run, color: RGBColor):

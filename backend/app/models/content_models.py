@@ -34,7 +34,7 @@ class BaseMark(BaseModel):
 
 class SimpleMark(BaseMark):
     """简单 Mark（无额外属性）"""
-    type: Literal["bold", "italic", "underline", "strike", "code", "subscript", "superscript"]
+    type: Union[Literal["bold", "italic", "underline", "strike", "code", "subscript", "superscript"], List[str]]
 
 
 class LinkMark(BaseMark):
@@ -49,8 +49,13 @@ class ValueMark(BaseMark):
     value: str = Field(..., description="样式值")
 
 
+class CompositeMark(BaseMark):
+    """组合 Mark（多个简单标记的集合）"""
+    type: List[str]
+
+
 # Mark 联合类型
-Mark = Union[SimpleMark, LinkMark, ValueMark]
+Mark = Union[SimpleMark, LinkMark, ValueMark, CompositeMark]
 
 
 # ============ Block 属性定义 ============

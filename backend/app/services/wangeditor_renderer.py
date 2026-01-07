@@ -9,7 +9,7 @@ import html
 from app.models.content_models import (
     Content, StyleSheet, Block,
     ParagraphBlock, HeadingBlock, ImageBlock, TableBlock, CodeBlock, DividerBlock,
-    Mark, SimpleMark, LinkMark, ValueMark,
+    Mark, SimpleMark, LinkMark, ValueMark, CompositeMark,
     StyleRule
 )
 
@@ -317,29 +317,50 @@ class WangEditorRenderer:
             ]
             
             # 4. 分组标记
-            simple_marks = [m for m in active_marks if isinstance(m, SimpleMark)]
-            link_marks = [m for m in active_marks if isinstance(m, LinkMark)]
-            value_marks = [m for m in active_marks if isinstance(m, ValueMark)]
+            # 收集所有有效的简单标记类型
+            effective_simple_types = set()
+            link_marks = []
+            value_marks = []
             
-            # 5. 先应用 SimpleMark(语义标签) - 反转顺序
-            # WangEditor 期望: <span><u><strong>文本</strong></u></span>
-            # Mark 列表顺序: [underline, bold]
-            # 反转后应用: bold -> u,保证 u 在外层
+            for m in active_marks:
+                if isinstance(m, SimpleMark):
+                    effective_simple_types.add(m.type)
+                elif isinstance(m, CompositeMark):
+                    effective_simple_types.update(m.type)
+                elif isinstance(m, LinkMark):
+                    link_marks.append(m)
+                elif isinstance(m, ValueMark):
+                    value_marks.append(m)
+            
+            # 5. 应用简单标记 (使用规范顺序)
+            # 定义嵌套顺序: 越靠前越在外层 (将被 reversed 遍历)
+            # 期望结果: <strong><em><u><s>text</s></u></em></strong>
+            # 遍历顺序应该是由内向外: strike -> underline -> italic -> bold
+            # 所以列表顺序应该是: [bold, italic, underline, strike]
+            CANONICAL_ORDER = ["bold", "italic", "underline", "strike", "code", "superscript", "subscript"]
+            
+            sorted_simple_types = sorted(
+                list(effective_simple_types), 
+                key=lambda t: CANONICAL_ORDER.index(t) if t in CANONICAL_ORDER else 999
+            )
+            
             current_html = segment_text
-            for mark in reversed(simple_marks):
-                if mark.type == "bold":
+            
+            # 反转遍历: 列表最后面的标签(内层)最先应用
+            for mark_type in reversed(sorted_simple_types):
+                if mark_type == "bold":
                     current_html = f"<strong>{current_html}</strong>"
-                elif mark.type == "italic":
+                elif mark_type == "italic":
                     current_html = f"<em>{current_html}</em>"
-                elif mark.type == "underline":
+                elif mark_type == "underline":
                     current_html = f"<u>{current_html}</u>"
-                elif mark.type == "strike":
+                elif mark_type == "strike":
                     current_html = f"<s>{current_html}</s>"
-                elif mark.type == "code":
+                elif mark_type == "code":
                     current_html = f"<code>{current_html}</code>"
-                elif mark.type == "superscript":
+                elif mark_type == "superscript":
                     current_html = f"<sup>{current_html}</sup>"
-                elif mark.type == "subscript":
+                elif mark_type == "subscript":
                     current_html = f"<sub>{current_html}</sub>"
             
             # 6. 再应用 ValueMark(span 在最外层)

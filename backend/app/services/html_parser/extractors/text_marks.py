@@ -5,9 +5,10 @@
 import re
 from bs4 import BeautifulSoup, Tag, NavigableString
 from typing import List, Tuple
+from collections import defaultdict
 
 from app.models.content_models import (
-    Mark, SimpleMark, LinkMark, ValueMark
+    Mark, SimpleMark, LinkMark, ValueMark, CompositeMark
 )
 
 
@@ -30,7 +31,6 @@ def merge_adjacent_marks(marks: List[Mark]) -> List[Mark]:
         return marks
     
     # 按类型分组标记
-    from collections import defaultdict
     mark_groups = defaultdict(list)
     
     for mark in marks:
@@ -92,6 +92,59 @@ def merge_adjacent_marks(marks: List[Mark]) -> List[Mark]:
     return merged_marks
 
 
+def merge_same_range_marks(marks: List[Mark]) -> List[Mark]:
+    """
+    合并具有相同范围的不同类型标记(仅限 SimpleMark)
+    
+    例如: 
+    {type: bold, range: [0, 5]} 和 {type: italic, range: [0, 5]}
+    合并为:
+    {type: [bold, italic], range: [0, 5]}
+    """
+    if not marks:
+        return marks
+        
+    # 按 range 分组
+    range_groups = defaultdict(list)
+    for mark in marks:
+        range_groups[mark.range].append(mark)
+        
+    merged_result = []
+    
+    # 处理每个分组
+    for r, group_marks in range_groups.items():
+        simple_marks = []
+        other_marks = []
+        
+        for m in group_marks:
+            if isinstance(m, SimpleMark):
+                simple_marks.append(m)
+            else:
+                other_marks.append(m)
+                
+        # 统一转换为列表格式 (无论数量多少)
+        if simple_marks:
+            all_types = []
+            for m in simple_marks:
+                if isinstance(m.type, list):
+                    all_types.extend(m.type)
+                else:
+                    all_types.append(m.type)
+            
+            # 去重并排序
+            types = sorted(list(set(all_types)))
+            
+            # 创建 CompositeMark (统一使用列表 type)
+            merged_result.append(CompositeMark(type=types, range=r))
+            
+        # 添加其他类型的标记
+        merged_result.extend(other_marks)
+    
+    # 重新按位置排序
+    merged_result.sort(key=lambda m: m.range[0])
+    return merged_result
+
+
 def extract_text_and_marks(element: Tag) -> Tuple[str, List[Mark]]:
     """
     从元素中提取纯文本和格式标记(递归遍历法)
@@ -99,7 +152,8 @@ def extract_text_and_marks(element: Tag) -> Tuple[str, List[Mark]]:
     优化:
     1. 避免重复标记
     2. 正确处理嵌套标记
-    3. 合并相邻的相同标记
+    3. 合并相邻的相同标记 (merge_adjacent_marks)
+    4. 合并相同范围的不同标记 (merge_same_range_marks)
     
     Args:
         element: HTML 元素
@@ -186,6 +240,20 @@ def extract_text_and_marks(element: Tag) -> Tuple[str, List[Mark]]:
             if family_match:
                 new_marks.append({'type': 'value', 'name': 'fontFamily', 'value': family_match.group(1).strip()})
             
+            # 粗体 (font-weight)
+            weight_match = re.search(r'font-weight:\s*([^;]+)', style_attr)
+            if weight_match:
+                weight_value = weight_match.group(1).strip().lower()
+                if weight_value == 'bold' or (weight_value.isdigit() and int(weight_value) >= 700):
+                    new_marks.append({'type': 'simple', 'name': 'bold'})
+            
+            # 斜体 (font-style)
+            style_match = re.search(r'font-style:\s*([^;]+)', style_attr)
+            if style_match:
+                style_value = style_match.group(1).strip().lower()
+                if 'italic' in style_value or 'oblique' in style_value:
+                    new_marks.append({'type': 'simple', 'name': 'italic'})
+            
             # 文本装饰 (text-decoration)
             decoration_match = re.search(r'text-decoration:\s*([^;]+)', style_attr)
             if decoration_match:
@@ -202,7 +270,10 @@ def extract_text_and_marks(element: Tag) -> Tuple[str, List[Mark]]:
     # 开始递归
     traverse(element, [])
     
-    # 合并相邻的相同标记
+    # 1. 优先执行相邻合并 (减少标记数量)
     marks = merge_adjacent_marks(marks)
+    
+    # 2. 然后执行同范围合并 (进一步压缩)
+    marks = merge_same_range_marks(marks)
     
     return full_text, marks
