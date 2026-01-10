@@ -151,6 +151,12 @@ class DocxExporter:
                         cell_style_map[block_id] = {}
                     cell_style_map[block_id].update(styles)
         
+        # 调试日志
+        if cell_style_map:
+            logger.info(f"📊 导出统计: 单元格样式数量: {len(cell_style_map)}")
+            for cell_id, styles in list(cell_style_map.items())[:5]:
+                logger.info(f"  {cell_id}: {styles}")
+        
         return cell_style_map
     
     def _build_column_width_map(self) -> Dict[str, Dict[int, str]]:

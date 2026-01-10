@@ -4,12 +4,14 @@ import { chapterService } from '../services/chapterService';
 import Toast, { useToast } from '../components/Toast';
 import { DocumentListSkeleton } from '../components/Loading';
 import ConfirmDialog, { useConfirmDialog } from '../components/ConfirmDialog';
+import ImportDocxModal from '../components/ImportDocxModal';
 import './DocumentList.css';
 
 const DocumentList: React.FC = () => {
   const [documents, setDocuments] = useState<any[]>([]);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [showImportModal, setShowImportModal] = useState(false);
   const navigate = useNavigate();
   
   // UI 组件 Hooks
@@ -47,6 +49,25 @@ const DocumentList: React.FC = () => {
     }
   };
 
+  const handleImport = async (file: File, options: { maxHeadingLevel: number; documentTitle: string }) => {
+    try {
+      const result = await chapterService.importDocx(file, {
+        maxHeadingLevel: options.maxHeadingLevel,
+        documentTitle: options.documentTitle
+      });
+
+      toast.success(result.message);
+      setShowImportModal(false);
+
+      // 导入成功后跳转到新文档
+      navigate(`/doc/${result.doc_id}`);
+    } catch (error: any) {
+      const message = error.response?.data?.detail || '导入失败，请检查文件格式';
+      toast.error(message);
+      throw error; // 重新抛出以便模态框保持打开状态
+    }
+  };
+
   const handleDelete = (doc: any) => {
     confirm.confirmDelete(doc.title, async () => {
       try {
@@ -74,7 +95,12 @@ const DocumentList: React.FC = () => {
     <div className="doc-list-container">
       <div className="doc-list-header">
         <h2>我的文档</h2>
-        <button className="primary-btn" onClick={handleCreate}>新建文档</button>
+        <div className="header-actions">
+          <button className="secondary-btn" onClick={() => setShowImportModal(true)}>
+            📥 导入 Word
+          </button>
+          <button className="primary-btn" onClick={handleCreate}>新建文档</button>
+        </div>
       </div>
       
       {loading ? (
@@ -121,6 +147,13 @@ const DocumentList: React.FC = () => {
         <button disabled={documents.length < 10} onClick={() => setPage(p => p + 1)}>下一页</button>
       </div>
 
+      {/* DOCX 导入模态框 */}
+      <ImportDocxModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onImport={handleImport}
+      />
+
       {/* UI 组件 */}
       <Toast messages={toast.messages} onRemove={toast.removeToast} />
       <ConfirmDialog {...confirm.dialogProps} />
@@ -129,3 +162,4 @@ const DocumentList: React.FC = () => {
 };
 
 export default DocumentList;
+

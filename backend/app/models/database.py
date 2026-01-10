@@ -37,11 +37,11 @@ class Document(Base):
     
     # 关联关系：一个文档有多个章节
     # cascade="all, delete-orphan" 表示删除文档时级联删除所有章节
+    # 注意：不在关系中使用 order_by，避免删除时触发大量排序导致缓冲区溢出
     chapters = relationship(
         "Chapter", 
         back_populates="document",
-        cascade="all, delete-orphan",
-        order_by="[Chapter.level, Chapter.order_index]"
+        cascade="all, delete-orphan"
     )
     
     # 关联关系：文档配置 (一对一)
@@ -107,11 +107,12 @@ class Chapter(Base):
     document = relationship("Document", back_populates="chapters")
     
     # 关联关系：父子章节（自引用）
+    # 注意：不在关系中使用 order_by，避免删除时触发大量排序导致缓冲区溢出
+    # 需要排序时在查询时显式指定
     children = relationship(
         "Chapter",
         back_populates="parent",
-        cascade="all, delete-orphan",
-        order_by="[Chapter.order_index]"
+        cascade="all, delete-orphan"
     )
     parent = relationship("Chapter", back_populates="children", remote_side="Chapter.id")
 

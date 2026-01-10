@@ -15,7 +15,7 @@ import traceback
 
 from app.core.config import settings
 from app.core.database import engine, Base
-from app.api.v1 import chapters, documents, export, upload, ai_chapters, document_settings, ai_edit
+from app.api.v1 import chapters, documents, export, upload, ai_chapters, document_settings, ai_edit, docx_import
 
 # 配置日志
 logging.basicConfig(
@@ -125,6 +125,7 @@ app.include_router(upload.router)
 app.include_router(ai_chapters.router)  # AI 章节处理 API
 app.include_router(document_settings.router)  # 文档配置 API
 app.include_router(ai_edit.router)  # AI 编辑 API
+app.include_router(docx_import.router)  # DOCX 导入 API
 
 
 # 挂载静态文件目录（用于提供上传的图片）

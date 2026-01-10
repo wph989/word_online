@@ -134,6 +134,25 @@ class MessageResponse(BaseModel):
     success: bool = Field(default=True, description="是否成功")
 
 
+# ============ DOCX 导入相关模型 ============
+
+class ImportChapterInfo(BaseModel):
+    """导入结果中的章节信息"""
+    id: str = Field(..., description="章节ID")
+    title: str = Field(..., description="章节标题")
+    level: int = Field(..., description="章节层级")
+    order_index: int = Field(..., description="排序索引")
+    parent_id: Optional[str] = Field(None, description="父章节ID")
+
+
+class ImportResponse(BaseModel):
+    """DOCX 导入响应"""
+    doc_id: str = Field(..., description="创建的文档ID")
+    title: str = Field(..., description="文档标题")
+    chapters: List[ImportChapterInfo] = Field(..., description="创建的章节列表")
+    message: str = Field(..., description="导入结果消息")
+
+
 # ============ 文档配置相关模型 ============
 
 class HeadingStyle(BaseModel):

@@ -23,6 +23,25 @@
   font-size: 14px;
 }
 
+.secondary-btn {
+  background-color: white;
+  color: #2b579a;
+  border: 1px solid #2b579a;
+  padding: 10px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.secondary-btn:hover {
+  background-color: #f0f5ff;
+}
+
+.header-actions {
+  display: flex;
+  gap: 12px;
+}
 .doc-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));

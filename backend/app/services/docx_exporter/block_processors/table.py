@@ -71,10 +71,6 @@ def add_table(
                 # 应用单元格样式 - 使用 cell-X-Y 格式的 ID
                 cell_id = f"cell-{row_idx}-{col_idx}"
                 apply_cell_style(cell, para, cell_id, cell_style_map)
-                
-                # 为表头行（第一行）应用默认样式
-                if row_idx == 0:
-                    apply_header_style(cell, para)
     
     # 处理合并单元格
     for region in merge_regions:
@@ -95,25 +91,63 @@ def _apply_column_widths(table, column_widths: Dict[int, str], cols: int):
     
     Args:
         table: Word 表格对象
-        column_widths: 列宽映射 {column_index: width_value}，宽度值为像素字符串
+        column_widths: 列宽映射 {column_index: width_value}，宽度值可以是数字或带单位的字符串（如 "219.5pt"）
         cols: 列数
     """
+    import re
+    
+    def parse_width(width_str):
+        """解析宽度值，支持带单位的字符串
+        
+        Args:
+            width_str: 宽度字符串，如 "219.5pt", "100px", "150"
+            
+        Returns:
+            float: 宽度的点数值（pt）
+        """
+        if isinstance(width_str, (int, float)):
+            return float(width_str)
+        
+        # 提取数字部分
+        match = re.match(r'([\d.]+)\s*(pt|px|%)?', str(width_str).strip())
+        if match:
+            value = float(match.group(1))
+            unit = match.group(2) or 'px'  # 默认单位为 px
+            
+            # 转换为 pt
+            if unit == 'pt':
+                return value
+            elif unit == 'px':
+                # 1 px ≈ 0.75 pt (基于 96 DPI)
+                return value * 0.75
+            elif unit == '%':
+                # 百分比转换为固定宽度（假设页面宽度为 595pt，A4纸宽度）
+                return 595 * value / 100
+        
+        return None
+    
     try:
         for col_idx in range(cols):
             width_str = column_widths.get(col_idx)
             if width_str:
                 try:
-                    # 将像素转换为 Twips
-                    width_px = float(width_str)
-                    width_twips = int(width_px * PX_TO_TWIPS)
+                    # 解析宽度值
+                    width_pt = parse_width(width_str)
                     
-                    # 设置每一行的单元格宽度（确保列宽一致）
-                    for row in table.rows:
-                        if col_idx < len(row.cells):
-                            row.cells[col_idx].width = Twips(width_twips)
-                    
-                    logger.debug(f"应用列宽: 列{col_idx} = {width_px}px -> {width_twips} twips")
-                except ValueError as e:
+                    if width_pt is not None:
+                        # pt 转换为 Twips (1 pt = 20 twips)
+                        width_twips = int(width_pt * 20)
+                        
+                        # 设置每一行的单元格宽度（确保列宽一致）
+                        for row in table.rows:
+                            if col_idx < len(row.cells):
+                                row.cells[col_idx].width = Twips(width_twips)
+                        
+                        logger.debug(f"应用列宽: 列{col_idx} = {width_str} -> {width_pt}pt -> {width_twips} twips")
+                    else:
+                        logger.warning(f"无法解析列宽 (列{col_idx}): {width_str}")
+                except Exception as e:
                     logger.warning(f"解析列宽失败 (列{col_idx}): {width_str}, 错误: {e}")
     except Exception as e:
         logger.error(f"应用列宽失败: {e}")
+

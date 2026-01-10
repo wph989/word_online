@@ -169,6 +169,39 @@ export const chapterService = {
   exportDocumentToDocx: (docId: string, includeChapterTitles = true, chapterTitleLevel = 1) => {
     const url = `${API_BASE_URL}/api/v1/export/documents/${docId}/docx?include_chapter_titles=${includeChapterTitles}&chapter_title_level=${chapterTitleLevel}`;
     window.open(url, '_blank');
+  },
+
+  // DOCX 导入
+  importDocx: async (file: File, options?: { maxHeadingLevel?: number; documentTitle?: string }) => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    if (options?.maxHeadingLevel) {
+      formData.append('max_heading_level', String(options.maxHeadingLevel));
+    }
+    if (options?.documentTitle) {
+      formData.append('document_title', options.documentTitle);
+    }
+
+    const response = await api.post('/api/v1/documents/import', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      },
+      timeout: 60000 // 60秒超时（大文件可能需要更长时间）
+    });
+
+    return response.data as {
+      doc_id: string;
+      title: string;
+      chapters: Array<{
+        id: string;
+        title: string;
+        level: number;
+        order_index: number;
+        parent_id: string | null;
+      }>;
+      message: string;
+    };
   }
 };
 
